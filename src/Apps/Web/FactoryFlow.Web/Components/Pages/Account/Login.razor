@@ -1,0 +1,73 @@
+@page "/Account/Login"
+@using FactoryFlow.Modules.Identity.Domain.Entities
+@using Microsoft.AspNetCore.Identity
+@inject SignInManager<ApplicationUser> SignInManager
+@inject NavigationManager Navigation
+
+<PageTitle>Anmelden – FactoryFlow</PageTitle>
+
+<div class="row justify-content-center mt-5">
+    <div class="col-md-5 col-lg-4">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h3 class="card-title text-center mb-4">FactoryFlow</h3>
+
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <div class="alert alert-danger">@_errorMessage</div>
+                }
+
+                <EditForm Model="_model" OnValidSubmit="HandleLogin" FormName="login">
+                    <DataAnnotationsValidator />
+
+                    <div class="mb-3">
+                        <label for="email" class="form-label">E-Mail</label>
+                        <InputText id="email" @bind-Value="_model.Email" class="form-control form-control-lg" placeholder="admin@factoryflow.local" />
+                        <ValidationMessage For="() => _model.Email" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Passwort</label>
+                        <InputText id="password" @bind-Value="_model.Password" type="password" class="form-control form-control-lg" />
+                        <ValidationMessage For="() => _model.Password" />
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-lg w-100">Anmelden</button>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private LoginModel _model { get; set; } = default!;
+
+    protected override void OnInitialized() => _model ??= new();
+
+    private string? _errorMessage;
+
+    private async Task HandleLogin()
+    {
+        var result = await SignInManager.PasswordSignInAsync(
+            _model.Email, _model.Password, isPersistent: true, lockoutOnFailure: false);
+
+        if (result.Succeeded)
+        {
+            Navigation.NavigateTo("/", forceLoad: true);
+        }
+        else
+        {
+            _errorMessage = "Anmeldung fehlgeschlagen. Bitte prüfe E-Mail und Passwort.";
+        }
+    }
+
+    private sealed class LoginModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "E-Mail ist erforderlich.")]
+        public string Email { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Passwort ist erforderlich.")]
+        public string Password { get; set; } = string.Empty;
+    }
+}

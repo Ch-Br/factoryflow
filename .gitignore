@@ -1,0 +1,23 @@
+# Build
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+*.user
+*.userosscache
+*.suo
+*.cache
+
+# NuGet
+*.nupkg
+**/packages/
+
+# IDE / OS
+.vs/
+.idea/
+*.swp
+Thumbs.db
+[Dd]esktop.ini
+
+# Cursor local plans
+.cursor/

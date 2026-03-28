@@ -1,0 +1,235 @@
+@page "/tickets/create"
+@using FactoryFlow.Modules.Tickets.Application.Commands.CreateTicket
+@using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketCreationLookups
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inject CreateTicketCommandHandler CommandHandler
+@inject GetTicketCreationLookupsQueryHandler LookupsHandler
+@inject NavigationManager Navigation
+
+<PageTitle>Neues Ticket – FactoryFlow</PageTitle>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-lg-8 col-xl-6">
+            <h2 class="mb-4">Neues Ticket erstellen</h2>
+
+            @if (_loading)
+            {
+                <div class="d-flex align-items-center gap-2 my-4">
+                    <div class="spinner-border spinner-border-sm" role="status"></div>
+                    <span>Formular wird geladen...</span>
+                </div>
+            }
+            else if (_loadError is not null)
+            {
+                <div class="alert alert-danger">@_loadError</div>
+            }
+            else if (_created is not null)
+            {
+                <div class="alert alert-success">
+                    <h5 class="alert-heading">Ticket erstellt</h5>
+                    <p class="mb-1">Ticketnummer: <strong>@_created.TicketNumber</strong></p>
+                    <hr />
+                    <button class="btn btn-outline-success" @onclick="ResetForm">Weiteres Ticket anlegen</button>
+                </div>
+            }
+            else
+            {
+                <EditForm Model="_model" OnValidSubmit="HandleSubmit">
+                    <DataAnnotationsValidator />
+
+                    @if (_submitErrors.Count > 0)
+                    {
+                        <div class="alert alert-danger">
+                            <ul class="mb-0">
+                                @foreach (var err in _submitErrors)
+                                {
+                                    <li>@err</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label for="title" class="form-label">Titel *</label>
+                        <InputText id="title" @bind-Value="_model.Title" class="form-control form-control-lg" maxlength="300" />
+                        <ValidationMessage For="() => _model.Title" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Beschreibung *</label>
+                        <InputTextArea id="description" @bind-Value="_model.Description" class="form-control" rows="4" maxlength="4000" />
+                        <ValidationMessage For="() => _model.Description" />
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="ticketType" class="form-label">Ticket-Typ *</label>
+                            <InputSelect id="ticketType" @bind-Value="_model.TicketTypeId" class="form-select form-select-lg">
+                                <option value="">— Bitte wählen —</option>
+                                @foreach (var t in _lookups!.TicketTypes)
+                                {
+                                    <option value="@t.Id">@t.Name</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="() => _model.TicketTypeId" />
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="priority" class="form-label">Priorität *</label>
+                            <InputSelect id="priority" @bind-Value="_model.PriorityId" class="form-select form-select-lg">
+                                <option value="">— Bitte wählen —</option>
+                                @foreach (var p in _lookups!.Priorities)
+                                {
+                                    <option value="@p.Id">@p.Name</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="() => _model.PriorityId" />
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="department" class="form-label">Abteilung / Bereich *</label>
+                            <InputSelect id="department" @bind-Value="_model.DepartmentId" class="form-select form-select-lg">
+                                <option value="">— Bitte wählen —</option>
+                                @foreach (var d in _lookups!.Departments)
+                                {
+                                    <option value="@d.Id">@d.Name</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="() => _model.DepartmentId" />
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="site" class="form-label">Standort</label>
+                            <InputSelect id="site" @bind-Value="_model.SiteId" class="form-select">
+                                <option value="">— optional —</option>
+                                @foreach (var s in _lookups!.Sites)
+                                {
+                                    <option value="@s.Id">@s.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="machine" class="form-label">Maschine / Arbeitsplatz</label>
+                        <InputText id="machine" @bind-Value="_model.MachineOrWorkstation" class="form-control" maxlength="200" placeholder="optional" />
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-lg" disabled="@_submitting">
+                        @if (_submitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        }
+                        Ticket anlegen
+                    </button>
+                </EditForm>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private TicketCreationLookupsDto? _lookups;
+    private CreateTicketFormModel _model = new();
+    private bool _loading = true;
+    private string? _loadError;
+    private bool _submitting;
+    private List<string> _submitErrors = [];
+    private CreateTicketResponse? _created;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _lookups = await LookupsHandler.HandleAsync();
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"Stammdaten konnten nicht geladen werden: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        _submitting = true;
+        _submitErrors.Clear();
+
+        try
+        {
+            var command = new CreateTicketCommand
+            {
+                Title = _model.Title,
+                Description = _model.Description,
+                TicketTypeId = Guid.Parse(_model.TicketTypeId),
+                PriorityId = Guid.Parse(_model.PriorityId),
+                DepartmentId = Guid.Parse(_model.DepartmentId),
+                SiteId = string.IsNullOrEmpty(_model.SiteId) ? null : Guid.Parse(_model.SiteId),
+                MachineOrWorkstation = _model.MachineOrWorkstation
+            };
+
+            var result = await CommandHandler.HandleAsync(command);
+
+            if (result.Succeeded)
+            {
+                _created = result.Value;
+            }
+            else
+            {
+                _submitErrors.AddRange(result.Errors);
+            }
+        }
+        catch (FormatException)
+        {
+            _submitErrors.Add("Bitte alle Pflichtfelder korrekt ausfüllen.");
+        }
+        catch (Exception ex)
+        {
+            _submitErrors.Add($"Unerwarteter Fehler: {ex.Message}");
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private void ResetForm()
+    {
+        _model = new();
+        _created = null;
+        _submitErrors.Clear();
+    }
+
+    private sealed class CreateTicketFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Titel ist erforderlich.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(300)]
+        public string Title { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Beschreibung ist erforderlich.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(4000)]
+        public string Description { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Ticket-Typ ist erforderlich.")]
+        public string TicketTypeId { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Priorität ist erforderlich.")]
+        public string PriorityId { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Abteilung ist erforderlich.")]
+        public string DepartmentId { get; set; } = string.Empty;
+
+        public string? SiteId { get; set; }
+
+        [System.ComponentModel.DataAnnotations.MaxLength(200)]
+        public string? MachineOrWorkstation { get; set; }
+    }
+}
