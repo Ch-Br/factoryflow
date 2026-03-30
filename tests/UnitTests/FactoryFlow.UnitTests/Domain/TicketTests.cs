@@ -116,4 +116,58 @@ public class TicketTests
         ticket.SiteId.Should().BeNull();
         ticket.MachineOrWorkstation.Should().BeNull();
     }
+
+    [Fact]
+    public void ChangeStatus_WithDifferentStatus_UpdatesStatusId()
+    {
+        var originalStatusId = TicketsSeedData.StatusNewId;
+        var newStatusId = TicketsSeedData.StatusInProgressId;
+
+        var ticket = CreateValidTicket(statusNewId: originalStatusId);
+
+        var previousStatusId = ticket.ChangeStatus(newStatusId);
+
+        ticket.StatusId.Should().Be(newStatusId);
+        previousStatusId.Should().Be(originalStatusId);
+    }
+
+    [Fact]
+    public void ChangeStatus_WithSameStatus_ThrowsInvalidOperationException()
+    {
+        var statusId = TicketsSeedData.StatusNewId;
+        var ticket = CreateValidTicket(statusNewId: statusId);
+
+        var act = () => ticket.ChangeStatus(statusId);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*identisch*");
+    }
+
+    [Fact]
+    public void ChangeStatus_ReturnsPreviousStatusId()
+    {
+        var ticket = CreateValidTicket(statusNewId: TicketsSeedData.StatusNewId);
+
+        var previous = ticket.ChangeStatus(TicketsSeedData.StatusInProgressId);
+        previous.Should().Be(TicketsSeedData.StatusNewId);
+
+        var previous2 = ticket.ChangeStatus(TicketsSeedData.StatusClosedId);
+        previous2.Should().Be(TicketsSeedData.StatusInProgressId);
+
+        ticket.StatusId.Should().Be(TicketsSeedData.StatusClosedId);
+    }
+
+    private static Ticket CreateValidTicket(Guid? statusNewId = null)
+    {
+        return Ticket.Create(
+            title: "Test-Ticket",
+            description: "Beschreibung",
+            ticketTypeId: TicketsSeedData.TypeMachineFailureId,
+            priorityId: TicketsSeedData.PriorityCriticalId,
+            departmentId: Guid.NewGuid(),
+            siteId: null,
+            machineOrWorkstation: null,
+            statusNewId: statusNewId ?? TicketsSeedData.StatusNewId,
+            createdByUserId: "user-123");
+    }
 }

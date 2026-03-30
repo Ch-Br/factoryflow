@@ -3,8 +3,13 @@ using FactoryFlow.Modules.Audit.Infrastructure.Services;
 using FactoryFlow.Modules.Identity.Domain.Entities;
 using FactoryFlow.Modules.Identity.Infrastructure.Seeds;
 using FactoryFlow.Modules.Identity.Services;
+using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketComment;
+using FactoryFlow.Modules.Tickets.Application.Commands.ChangeTicketStatus;
 using FactoryFlow.Modules.Tickets.Application.Commands.CreateTicket;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketCreationLookups;
+using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketDetail;
+using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketStatusLookups;
+using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketsList;
 using FactoryFlow.Modules.Tickets.Domain.Services;
 using FactoryFlow.Modules.Tickets.Infrastructure.Services;
 using FactoryFlow.SharedKernel.Domain;
@@ -57,7 +62,12 @@ try
     // --- Tickets module ---
     builder.Services.AddScoped<ITicketNumberGenerator, TicketNumberGenerator>();
     builder.Services.AddScoped<CreateTicketCommandHandler>();
+    builder.Services.AddScoped<ChangeTicketStatusCommandHandler>();
+    builder.Services.AddScoped<AddTicketCommentCommandHandler>();
     builder.Services.AddScoped<GetTicketCreationLookupsQueryHandler>();
+    builder.Services.AddScoped<GetTicketsListQueryHandler>();
+    builder.Services.AddScoped<GetTicketStatusLookupsQueryHandler>();
+    builder.Services.AddScoped<GetTicketDetailQueryHandler>();
 
     // --- Audit module ---
     builder.Services.AddScoped<IAuditWriter, AuditWriter>();

@@ -20,6 +20,7 @@ public class FactoryFlowDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Site> Sites => Set<Site>();
 
     public DbSet<Ticket> Tickets => Set<Ticket>();
+    public DbSet<TicketComment> TicketComments => Set<TicketComment>();
     public DbSet<TicketType> TicketTypes => Set<TicketType>();
     public DbSet<TicketPriority> TicketPriorities => Set<TicketPriority>();
     public DbSet<TicketStatus> TicketStatuses => Set<TicketStatus>();
@@ -39,6 +40,7 @@ public class FactoryFlowDbContext : IdentityDbContext<ApplicationUser>
 
         // Tickets module
         builder.ApplyConfiguration(new TicketConfiguration());
+        builder.ApplyConfiguration(new TicketCommentConfiguration());
         builder.ApplyConfiguration(new TicketTypeConfiguration());
         builder.ApplyConfiguration(new TicketPriorityConfiguration());
         builder.ApplyConfiguration(new TicketStatusConfiguration());

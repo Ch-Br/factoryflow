@@ -55,6 +55,16 @@ public class Ticket : AuditableEntity<Guid>
     public Guid StatusId { get; private set; }
     public TicketStatus? Status { get; private set; }
 
+    public Guid ChangeStatus(Guid newStatusId)
+    {
+        if (newStatusId == StatusId)
+            throw new InvalidOperationException("Der neue Status ist identisch mit dem aktuellen Status.");
+
+        var previousStatusId = StatusId;
+        StatusId = newStatusId;
+        return previousStatusId;
+    }
+
     public Guid DepartmentId { get; private set; }
 
     public Guid? SiteId { get; private set; }

@@ -1,0 +1,328 @@
+@page "/tickets/{Id:guid}"
+@using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketComment
+@using FactoryFlow.Modules.Tickets.Application.Commands.ChangeTicketStatus
+@using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketCreationLookups
+@using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketDetail
+@using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketStatusLookups
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inject GetTicketDetailQueryHandler Handler
+@inject GetTicketStatusLookupsQueryHandler StatusLookupsHandler
+@inject ChangeTicketStatusCommandHandler ChangeStatusHandler
+@inject AddTicketCommentCommandHandler CommentHandler
+@inject NavigationManager Navigation
+
+<PageTitle>Ticketdetails – FactoryFlow</PageTitle>
+
+<div class="container-fluid">
+    <a href="tickets" class="btn btn-outline-secondary btn-sm mb-3">
+        <i class="bi bi-arrow-left me-1"></i>Zurück zur Liste
+    </a>
+
+    @if (_loading)
+    {
+        <div class="d-flex align-items-center gap-2 my-4">
+            <div class="spinner-border spinner-border-sm" role="status"></div>
+            <span>Ticket wird geladen...</span>
+        </div>
+    }
+    else if (_loadError is not null)
+    {
+        <div class="alert alert-danger">@_loadError</div>
+    }
+    else if (_notFound)
+    {
+        <div class="alert alert-warning">
+            Ticket nicht gefunden.
+            <a href="tickets" class="alert-link">Zurück zur Liste</a>
+        </div>
+    }
+    else if (_detail is not null)
+    {
+        <div class="d-flex justify-content-between align-items-start mb-4">
+            <div>
+                <h2 class="mb-1">@_detail.Title</h2>
+                <span class="text-muted">@_detail.TicketNumber</span>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-2 text-muted">Beschreibung</h6>
+                        <p class="card-text" style="white-space: pre-wrap;">@_detail.Description</p>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-3 text-muted">Kommentare</h6>
+
+                        @if (_commentSuccess is not null)
+                        {
+                            <div class="alert alert-success py-2 mb-3">@_commentSuccess</div>
+                        }
+
+                        @if (_commentErrors.Count > 0)
+                        {
+                            <div class="alert alert-danger py-2 mb-3">
+                                <ul class="mb-0 ps-3">
+                                    @foreach (var err in _commentErrors)
+                                    {
+                                        <li>@err</li>
+                                    }
+                                </ul>
+                            </div>
+                        }
+
+                        <div class="mb-3">
+                            <textarea class="form-control"
+                                      rows="3"
+                                      maxlength="2000"
+                                      placeholder="Kommentar schreiben..."
+                                      @bind="_commentText"
+                                      disabled="@_submittingComment"></textarea>
+                        </div>
+
+                        <button class="btn btn-primary"
+                                disabled="@(_submittingComment || string.IsNullOrWhiteSpace(_commentText))"
+                                @onclick="HandleAddComment">
+                            @if (_submittingComment)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                            }
+                            Kommentar hinzufügen
+                        </button>
+
+                        @if (_detail.Comments.Count > 0)
+                        {
+                            <hr class="my-3" />
+                            @foreach (var comment in _detail.Comments)
+                            {
+                                <div class="mb-3 pb-3 border-bottom">
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <strong>@comment.CreatedByDisplayName</strong>
+                                        <small class="text-muted">@comment.CreatedAtUtc.ToString("dd.MM.yyyy HH:mm")</small>
+                                    </div>
+                                    <p class="mb-0" style="white-space: pre-wrap;">@comment.Text</p>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <p class="text-muted mt-3 mb-0">Noch keine Kommentare vorhanden.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-body">
+                        <dl class="mb-0">
+                            <dt>Status</dt>
+                            <dd>@_detail.StatusName</dd>
+
+                            <dt>Priorität</dt>
+                            <dd>@_detail.PriorityName</dd>
+
+                            <dt>Typ</dt>
+                            <dd>@_detail.TicketTypeName</dd>
+
+                            @if (!string.IsNullOrWhiteSpace(_detail.DepartmentName))
+                            {
+                                <dt>Abteilung</dt>
+                                <dd>@_detail.DepartmentName</dd>
+                            }
+
+                            @if (!string.IsNullOrWhiteSpace(_detail.SiteName))
+                            {
+                                <dt>Standort</dt>
+                                <dd>@_detail.SiteName</dd>
+                            }
+
+                            @if (!string.IsNullOrWhiteSpace(_detail.MachineOrWorkstation))
+                            {
+                                <dt>Maschine / Arbeitsplatz</dt>
+                                <dd>@_detail.MachineOrWorkstation</dd>
+                            }
+
+                            <dt>Erstellt am</dt>
+                            <dd>@_detail.CreatedAtUtc.ToString("dd.MM.yyyy HH:mm")</dd>
+
+                            <dt>Erstellt von</dt>
+                            <dd>@_detail.CreatedByDisplayName</dd>
+                        </dl>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-3 text-muted">Status ändern</h6>
+
+                        @if (_statusSuccess is not null)
+                        {
+                            <div class="alert alert-success py-2 mb-3">@_statusSuccess</div>
+                        }
+
+                        @if (_statusErrors.Count > 0)
+                        {
+                            <div class="alert alert-danger py-2 mb-3">
+                                <ul class="mb-0 ps-3">
+                                    @foreach (var err in _statusErrors)
+                                    {
+                                        <li>@err</li>
+                                    }
+                                </ul>
+                            </div>
+                        }
+
+                        @if (_statusOptions is null)
+                        {
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="spinner-border spinner-border-sm" role="status"></div>
+                                <span class="text-muted">Statuswerte werden geladen...</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="mb-3">
+                                <select class="form-select form-select-lg" @bind="_selectedStatusId" disabled="@_submittingStatus">
+                                    @foreach (var s in _statusOptions)
+                                    {
+                                        <option value="@s.Id">@s.Name</option>
+                                    }
+                                </select>
+                            </div>
+
+                            <button class="btn btn-primary w-100"
+                                    disabled="@(_submittingStatus || _selectedStatusId == _detail.StatusId)"
+                                    @onclick="HandleChangeStatus">
+                                @if (_submittingStatus)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                }
+                                Status ändern
+                            </button>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private TicketDetailDto? _detail;
+    private bool _loading = true;
+    private bool _notFound;
+    private string? _loadError;
+
+    private IReadOnlyList<LookupItemDto>? _statusOptions;
+    private Guid _selectedStatusId;
+    private bool _submittingStatus;
+    private List<string> _statusErrors = [];
+    private string? _statusSuccess;
+
+    private string _commentText = string.Empty;
+    private bool _submittingComment;
+    private List<string> _commentErrors = [];
+    private string? _commentSuccess;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _detail = await Handler.HandleAsync(Id);
+            _notFound = _detail is null;
+
+            if (_detail is not null)
+            {
+                _selectedStatusId = _detail.StatusId;
+                _statusOptions = await StatusLookupsHandler.HandleAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"Ticket konnte nicht geladen werden: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task HandleChangeStatus()
+    {
+        _submittingStatus = true;
+        _statusErrors.Clear();
+        _statusSuccess = null;
+
+        try
+        {
+            var command = new ChangeTicketStatusCommand { NewStatusId = _selectedStatusId };
+            var result = await ChangeStatusHandler.HandleAsync(Id, command);
+
+            if (result.Succeeded)
+            {
+                _statusSuccess = "Status wurde erfolgreich geändert.";
+                _detail = await Handler.HandleAsync(Id);
+
+                if (_detail is not null)
+                    _selectedStatusId = _detail.StatusId;
+            }
+            else
+            {
+                _statusErrors.AddRange(result.Errors);
+            }
+        }
+        catch (Exception ex)
+        {
+            _statusErrors.Add($"Unerwarteter Fehler: {ex.Message}");
+        }
+        finally
+        {
+            _submittingStatus = false;
+        }
+    }
+
+    private async Task HandleAddComment()
+    {
+        _submittingComment = true;
+        _commentErrors.Clear();
+        _commentSuccess = null;
+
+        try
+        {
+            var command = new AddTicketCommentCommand { Text = _commentText };
+            var result = await CommentHandler.HandleAsync(Id, command);
+
+            if (result.Succeeded)
+            {
+                _commentSuccess = "Kommentar wurde hinzugefügt.";
+                _commentText = string.Empty;
+                _detail = await Handler.HandleAsync(Id);
+
+                if (_detail is not null)
+                    _selectedStatusId = _detail.StatusId;
+            }
+            else
+            {
+                _commentErrors.AddRange(result.Errors);
+            }
+        }
+        catch (Exception ex)
+        {
+            _commentErrors.Add($"Unerwarteter Fehler: {ex.Message}");
+        }
+        finally
+        {
+            _submittingComment = false;
+        }
+    }
+}

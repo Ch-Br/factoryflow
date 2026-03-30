@@ -1,0 +1,92 @@
+@page "/tickets"
+@using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketsList
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inject GetTicketsListQueryHandler Handler
+@inject NavigationManager Navigation
+
+<PageTitle>Tickets – FactoryFlow</PageTitle>
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">Tickets</h2>
+        <a href="tickets/create" class="btn btn-primary">Neues Ticket</a>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="d-flex align-items-center gap-2 my-4">
+            <div class="spinner-border spinner-border-sm" role="status"></div>
+            <span>Tickets werden geladen...</span>
+        </div>
+    }
+    else if (_loadError is not null)
+    {
+        <div class="alert alert-danger">@_loadError</div>
+    }
+    else if (_result is null || _result.Items.Count == 0)
+    {
+        <div class="alert alert-info">
+            Keine Tickets vorhanden.
+            <a href="tickets/create" class="alert-link">Erstes Ticket erstellen</a>
+        </div>
+    }
+    else
+    {
+        <p class="text-muted mb-3">@_result.TotalCount Ticket(s)</p>
+
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>Ticket-Nr.</th>
+                        <th>Titel</th>
+                        <th>Typ</th>
+                        <th>Priorität</th>
+                        <th>Status</th>
+                        <th>Erstellt am</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var ticket in _result.Items)
+                    {
+                        <tr role="button" style="cursor: pointer;" @onclick="() => NavigateToDetail(ticket.Id)">
+                            <td class="text-nowrap">@ticket.TicketNumber</td>
+                            <td>@ticket.Title</td>
+                            <td>@ticket.TicketTypeName</td>
+                            <td>@ticket.PriorityName</td>
+                            <td>@ticket.StatusName</td>
+                            <td class="text-nowrap">@ticket.CreatedAtUtc.ToString("dd.MM.yyyy HH:mm")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private TicketListResultDto? _result;
+    private bool _loading = true;
+    private string? _loadError;
+
+    private void NavigateToDetail(Guid ticketId) =>
+        Navigation.NavigateTo($"tickets/{ticketId}");
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _result = await Handler.HandleAsync();
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"Tickets konnten nicht geladen werden: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}
