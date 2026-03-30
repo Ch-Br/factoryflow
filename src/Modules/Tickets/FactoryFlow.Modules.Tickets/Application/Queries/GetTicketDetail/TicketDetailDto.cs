@@ -14,10 +14,18 @@ public sealed record TicketDetailDto(
     string? MachineOrWorkstation,
     DateTime CreatedAtUtc,
     string CreatedByDisplayName,
-    IReadOnlyList<TicketCommentDto> Comments);
+    IReadOnlyList<TicketCommentDto> Comments,
+    IReadOnlyList<TicketHistoryItemDto> History);
 
 public sealed record TicketCommentDto(
     Guid Id,
     string Text,
     DateTime CreatedAtUtc,
     string CreatedByDisplayName);
+
+public sealed record TicketHistoryItemDto(
+    DateTime OccurredAtUtc,
+    string EventType,
+    string EventLabel,
+    string ActorDisplayName,
+    string Text);

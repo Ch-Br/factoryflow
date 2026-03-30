@@ -394,6 +394,52 @@ public class TicketsApiTests : IClassFixture<FactoryFlowWebApplicationFactory>
         detail.Comments[0].CreatedByDisplayName.Should().NotBeNullOrWhiteSpace();
     }
 
+    [Fact]
+    public async Task GetTicketDetail_AfterFullLifecycle_IncludesHistoryWithAllEventTypes()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+
+        var createResponse = await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
+        {
+            Title = "Verlauf-Integrationstest",
+            Description = "Prüfe ob Verlauf alle Events enthält.",
+            TicketTypeId = TicketsSeedData.TypeGeneralRequestId,
+            PriorityId = TicketsSeedData.PriorityMediumId,
+            DepartmentId = FactoryFlow.Modules.Identity.Infrastructure.Seeds.IdentitySeedData.ProductionDeptId
+        });
+
+        var createResult = await createResponse.Content.ReadFromJsonAsync<CreateTicketResponse>();
+
+        await client.PatchAsJsonAsync(
+            $"/api/tickets/{createResult!.TicketId}/status",
+            new ChangeTicketStatusCommand { NewStatusId = TicketsSeedData.StatusInProgressId });
+
+        await client.PostAsJsonAsync(
+            $"/api/tickets/{createResult.TicketId}/comments",
+            new AddTicketCommentCommand { Text = "Verlauf-Kommentar" });
+
+        var detailResponse = await client.GetAsync($"/api/tickets/{createResult.TicketId}");
+        detailResponse.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+
+        var detail = await detailResponse.Content.ReadFromJsonAsync<TicketDetailDto>();
+        detail.Should().NotBeNull();
+        detail!.History.Should().HaveCountGreaterThanOrEqualTo(3);
+
+        detail.History.Should().Contain(h => h.EventType == "TicketCreated");
+        detail.History.Should().Contain(h => h.EventType == "TicketStatusChanged");
+        detail.History.Should().Contain(h => h.EventType == "TicketCommentAdded");
+
+        var statusEvent = detail.History.First(h => h.EventType == "TicketStatusChanged");
+        statusEvent.Text.Should().Contain("\u2192");
+        statusEvent.ActorDisplayName.Should().NotBeNullOrWhiteSpace();
+        statusEvent.EventLabel.Should().Be("Status geändert");
+
+        var commentEvent = detail.History.First(h => h.EventType == "TicketCommentAdded");
+        commentEvent.Text.Should().Contain("Verlauf-Kommentar");
+
+        detail.History.Should().BeInDescendingOrder(h => h.OccurredAtUtc);
+    }
+
     private async Task<HttpClient> CreateAuthenticatedClientAsync()
     {
         using var scope = _factory.Services.CreateScope();
