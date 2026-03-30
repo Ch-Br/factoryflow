@@ -7,6 +7,9 @@ public sealed record TicketListItemDto(
     string TicketTypeName,
     string PriorityName,
     string StatusName,
+    string? DepartmentName,
+    string? SiteName,
+    string? MachineOrWorkstation,
     DateTime CreatedAtUtc,
     DateTime? DueAtUtc,
     string DueState);

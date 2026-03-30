@@ -158,6 +158,27 @@ public class GetOverdueTicketsQueryHandlerTests : IDisposable
         item.OverdueBy.Should().BeLessThan(TimeSpan.FromHours(7));
     }
 
+    [Fact]
+    public async Task HandleAsync_FilterByPriorityId_ReturnsOnlyMatchingPriority()
+    {
+        SeedAllLookups();
+
+        _db.Set<Ticket>().AddRange(
+            CreateTicket("Kritisch-Overdue", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                dueAtUtc: DateTime.UtcNow.AddHours(-3)),
+            CreateTicket("Hoch-Overdue", new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+                priorityId: TicketsSeedData.PriorityHighId,
+                dueAtUtc: DateTime.UtcNow.AddHours(-1)));
+        await _db.SaveChangesAsync();
+
+        var handler = new GetOverdueTicketsQueryHandler(_db);
+        var result = await handler.HandleAsync(
+            new GetOverdueTicketsQuery(PriorityId: TicketsSeedData.PriorityHighId));
+
+        result.Items.Should().ContainSingle()
+            .Which.Title.Should().Be("Hoch-Overdue");
+    }
+
     private void SeedAllLookups()
     {
         if (!_db.Set<TicketType>().Any())

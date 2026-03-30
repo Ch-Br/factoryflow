@@ -1,3 +1,4 @@
+using FactoryFlow.Modules.Identity.Domain.Entities;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketsList;
 using FactoryFlow.Modules.Tickets.Domain.Entities;
 using FactoryFlow.Modules.Tickets.Infrastructure.Seeds;
@@ -9,6 +10,10 @@ namespace FactoryFlow.UnitTests.Application;
 
 public class GetTicketsListQueryHandlerTests : IDisposable
 {
+    private static readonly Guid TestDepartmentId = Guid.Parse("aa000000-0000-0000-0000-000000000001");
+    private static readonly Guid TestDepartment2Id = Guid.Parse("aa000000-0000-0000-0000-000000000002");
+    private static readonly Guid TestSiteId = Guid.Parse("bb000000-0000-0000-0000-000000000001");
+
     private readonly FactoryFlowDbContext _db;
     private int _ticketCounter;
 
@@ -55,7 +60,8 @@ public class GetTicketsListQueryHandlerTests : IDisposable
     public async Task HandleAsync_ProjectsNavigationPropertyNames()
     {
         SeedLookups();
-        var ticket = CreateTicket("Projektions-Test", new DateTime(2026, 2, 1, 12, 0, 0, DateTimeKind.Utc));
+        var ticket = CreateTicket("Projektions-Test", new DateTime(2026, 2, 1, 12, 0, 0, DateTimeKind.Utc),
+            siteId: TestSiteId, machineOrWorkstation: "CNC-Fräse 7");
         _db.Set<Ticket>().Add(ticket);
         await _db.SaveChangesAsync();
 
@@ -70,6 +76,9 @@ public class GetTicketsListQueryHandlerTests : IDisposable
         item.TicketTypeName.Should().Be("Maschinenstörung");
         item.PriorityName.Should().Be("Kritisch");
         item.StatusName.Should().Be("Neu");
+        item.DepartmentName.Should().Be("Produktion");
+        item.SiteName.Should().Be("Werk Süd");
+        item.MachineOrWorkstation.Should().Be("CNC-Fräse 7");
         item.CreatedAtUtc.Should().Be(new DateTime(2026, 2, 1, 12, 0, 0, DateTimeKind.Utc));
         item.DueAtUtc.Should().BeNull();
     }
@@ -174,6 +183,25 @@ public class GetTicketsListQueryHandlerTests : IDisposable
             .Which.Title.Should().Be("Match");
     }
 
+    [Fact]
+    public async Task HandleAsync_FilterByDepartmentId_ReturnsOnlyMatchingDepartment()
+    {
+        SeedAllLookups();
+        _db.Set<Ticket>().AddRange(
+            CreateTicket("Produktion1", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+            CreateTicket("Logistik1", new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+                departmentId: TestDepartment2Id),
+            CreateTicket("Produktion2", new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc)));
+        await _db.SaveChangesAsync();
+
+        var handler = new GetTicketsListQueryHandler(_db);
+        var result = await handler.HandleAsync(
+            new GetTicketsListQuery(DepartmentId: TestDepartmentId));
+
+        result.Items.Should().HaveCount(2);
+        result.Items.Should().OnlyContain(i => i.DepartmentName == "Produktion");
+    }
+
     private void SeedLookups()
     {
         if (!_db.Set<TicketType>().Any())
@@ -184,6 +212,8 @@ public class GetTicketsListQueryHandlerTests : IDisposable
                 TicketsSeedData.PriorityCriticalId, "Kritisch", "critical", 1));
             _db.Set<TicketStatus>().Add(new TicketStatus(
                 TicketsSeedData.StatusNewId, "Neu", "new", 1));
+            _db.Set<Department>().Add(new Department(TestDepartmentId, "Produktion", "prod"));
+            _db.Set<Site>().Add(new Site(TestSiteId, "Werk Süd", "ws"));
             _db.SaveChanges();
         }
     }
@@ -204,6 +234,11 @@ public class GetTicketsListQueryHandlerTests : IDisposable
                 new TicketStatus(TicketsSeedData.StatusInProgressId, "In Bearbeitung", "in_progress", 2),
                 new TicketStatus(TicketsSeedData.StatusClosedId, "Geschlossen", "closed", 3));
 
+            _db.Set<Department>().AddRange(
+                new Department(TestDepartmentId, "Produktion", "prod"),
+                new Department(TestDepartment2Id, "Logistik", "log"));
+            _db.Set<Site>().Add(new Site(TestSiteId, "Werk Süd", "ws"));
+
             _db.SaveChanges();
         }
     }
@@ -212,7 +247,10 @@ public class GetTicketsListQueryHandlerTests : IDisposable
         string title,
         DateTime createdAtUtc,
         Guid? statusId = null,
-        Guid? priorityId = null)
+        Guid? priorityId = null,
+        Guid? departmentId = null,
+        Guid? siteId = null,
+        string? machineOrWorkstation = null)
     {
         _ticketCounter++;
         var ticket = Ticket.Create(
@@ -220,9 +258,9 @@ public class GetTicketsListQueryHandlerTests : IDisposable
             description: "Testbeschreibung",
             ticketTypeId: TicketsSeedData.TypeMachineFailureId,
             priorityId: priorityId ?? TicketsSeedData.PriorityCriticalId,
-            departmentId: Guid.NewGuid(),
-            siteId: null,
-            machineOrWorkstation: null,
+            departmentId: departmentId ?? TestDepartmentId,
+            siteId: siteId,
+            machineOrWorkstation: machineOrWorkstation,
             statusNewId: statusId ?? TicketsSeedData.StatusNewId,
             createdByUserId: "test-user");
 

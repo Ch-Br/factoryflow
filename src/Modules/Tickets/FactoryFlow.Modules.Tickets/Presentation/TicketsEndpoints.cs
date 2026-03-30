@@ -131,10 +131,11 @@ public static class TicketsEndpoints
     }
 
     private static async Task<IResult> GetOverdueTicketsAsync(
+        [AsParameters] GetOverdueTicketsQuery query,
         GetOverdueTicketsQueryHandler handler,
         CancellationToken ct)
     {
-        var result = await handler.HandleAsync(ct);
+        var result = await handler.HandleAsync(query, ct);
         return Results.Ok(result);
     }
 

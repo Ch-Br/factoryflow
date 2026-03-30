@@ -13,14 +13,28 @@ public sealed class GetOverdueTicketsQueryHandler
         _db = db;
     }
 
-    public async Task<OverdueTicketsResultDto> HandleAsync(CancellationToken ct = default)
+    public Task<OverdueTicketsResultDto> HandleAsync(CancellationToken ct = default)
+        => HandleAsync(new GetOverdueTicketsQuery(), ct);
+
+    public async Task<OverdueTicketsResultDto> HandleAsync(GetOverdueTicketsQuery query, CancellationToken ct = default)
     {
         var utcNow = DateTime.UtcNow;
 
-        var raw = await _db.Set<Ticket>()
+        var q = _db.Set<Ticket>()
             .Where(t => t.DueAtUtc != null
                         && t.DueAtUtc <= utcNow
-                        && t.StatusId != TicketsSeedData.StatusClosedId)
+                        && t.StatusId != TicketsSeedData.StatusClosedId);
+
+        if (query.PriorityId.HasValue)
+            q = q.Where(t => t.PriorityId == query.PriorityId.Value);
+
+        if (query.DepartmentId.HasValue)
+            q = q.Where(t => t.DepartmentId == query.DepartmentId.Value);
+
+        if (query.StatusId.HasValue)
+            q = q.Where(t => t.StatusId == query.StatusId.Value);
+
+        var raw = await q
             .OrderBy(t => t.DueAtUtc)
             .Select(t => new
             {

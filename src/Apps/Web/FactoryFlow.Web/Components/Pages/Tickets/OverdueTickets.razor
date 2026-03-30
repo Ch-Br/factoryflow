@@ -1,9 +1,13 @@
 @page "/tickets/overdue"
 @using FactoryFlow.Modules.Tickets.Application.Queries.GetOverdueTickets
+@using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketCreationLookups
+@using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketStatusLookups
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize(Roles = "Supervisor,Admin")]
 @rendermode InteractiveServer
 @inject GetOverdueTicketsQueryHandler Handler
+@inject GetTicketStatusLookupsQueryHandler StatusLookupsHandler
+@inject GetTicketCreationLookupsQueryHandler CreationLookupsHandler
 @inject NavigationManager Navigation
 
 <PageTitle>Überfällige Tickets – FactoryFlow</PageTitle>
@@ -14,6 +18,43 @@
     </a>
 
     <h2 class="mb-4">Überfällige Tickets</h2>
+
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-end">
+                <div class="col-auto">
+                    <label class="form-label mb-0 small">Priorität</label>
+                    <select class="form-select form-select-sm" @onchange="HandlePriorityFilterChanged">
+                        <option value="">Alle</option>
+                        @foreach (var p in _priorityLookups)
+                        {
+                            <option value="@p.Id" selected="@(_filterPriorityId == p.Id)">@p.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label class="form-label mb-0 small">Abteilung</label>
+                    <select class="form-select form-select-sm" @onchange="HandleDepartmentFilterChanged">
+                        <option value="">Alle</option>
+                        @foreach (var d in _departmentLookups)
+                        {
+                            <option value="@d.Id" selected="@(_filterDepartmentId == d.Id)">@d.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label class="form-label mb-0 small">Status</label>
+                    <select class="form-select form-select-sm" @onchange="HandleStatusFilterChanged">
+                        <option value="">Alle</option>
+                        @foreach (var s in _statusLookups)
+                        {
+                            <option value="@s.Id" selected="@(_filterStatusId == s.Id)">@s.Name</option>
+                        }
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
 
     @if (_loading)
     {
@@ -71,6 +112,14 @@
     private bool _loading = true;
     private string? _loadError;
 
+    private IReadOnlyList<LookupItemDto> _statusLookups = [];
+    private IReadOnlyList<LookupItemDto> _priorityLookups = [];
+    private IReadOnlyList<LookupItemDto> _departmentLookups = [];
+
+    private Guid? _filterPriorityId;
+    private Guid? _filterDepartmentId;
+    private Guid? _filterStatusId;
+
     private void NavigateToDetail(Guid ticketId) =>
         Navigation.NavigateTo($"tickets/{ticketId}");
 
@@ -78,7 +127,12 @@
     {
         try
         {
-            _result = await Handler.HandleAsync();
+            _statusLookups = await StatusLookupsHandler.HandleAsync();
+            var creationLookups = await CreationLookupsHandler.HandleAsync();
+            _priorityLookups = creationLookups.Priorities;
+            _departmentLookups = creationLookups.Departments;
+
+            await LoadTicketsAsync();
         }
         catch (Exception ex)
         {
@@ -88,6 +142,30 @@
         {
             _loading = false;
         }
+    }
+
+    private async Task LoadTicketsAsync()
+    {
+        var query = new GetOverdueTicketsQuery(_filterPriorityId, _filterDepartmentId, _filterStatusId);
+        _result = await Handler.HandleAsync(query);
+    }
+
+    private async Task HandlePriorityFilterChanged(ChangeEventArgs e)
+    {
+        _filterPriorityId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null;
+        await LoadTicketsAsync();
+    }
+
+    private async Task HandleDepartmentFilterChanged(ChangeEventArgs e)
+    {
+        _filterDepartmentId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null;
+        await LoadTicketsAsync();
+    }
+
+    private async Task HandleStatusFilterChanged(ChangeEventArgs e)
+    {
+        _filterStatusId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null;
+        await LoadTicketsAsync();
     }
 
     private static string FormatOverdueBy(TimeSpan overdueBy)
