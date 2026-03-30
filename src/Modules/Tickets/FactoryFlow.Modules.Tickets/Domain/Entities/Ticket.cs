@@ -62,6 +62,18 @@ public class Ticket : AuditableEntity<Guid>
 
     public DateTime? DueAtUtc { get; private set; }
 
+    public int EscalationLevel { get; private set; }
+    public DateTime? FirstEscalatedAtUtc { get; private set; }
+
+    public void Escalate(DateTime utcNow)
+    {
+        if (EscalationLevel > 0)
+            throw new InvalidOperationException("Ticket ist bereits eskaliert.");
+
+        EscalationLevel = 1;
+        FirstEscalatedAtUtc = utcNow;
+    }
+
     /// <summary>
     /// Updates editable fields. Returns <c>true</c> if any value changed, <c>false</c> if all values were identical.
     /// </summary>

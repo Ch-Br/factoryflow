@@ -11,7 +11,7 @@ namespace FactoryFlow.Modules.Tickets.Application.Queries.GetTicketDetail;
 public sealed class GetTicketDetailQueryHandler
 {
     private static readonly string[] RelevantEventTypes =
-        ["TicketCreated", "TicketStatusChanged", "TicketCommentAdded", "TicketUpdated", "TicketAttachmentAdded"];
+        ["TicketCreated", "TicketStatusChanged", "TicketCommentAdded", "TicketUpdated", "TicketAttachmentAdded", "TicketEscalated"];
 
     private static readonly Dictionary<string, string> EventLabels = new()
     {
@@ -19,7 +19,8 @@ public sealed class GetTicketDetailQueryHandler
         ["TicketStatusChanged"] = "Status geändert",
         ["TicketCommentAdded"] = "Kommentar hinzugefügt",
         ["TicketUpdated"] = "Ticket bearbeitet",
-        ["TicketAttachmentAdded"] = "Anhang hinzugefügt"
+        ["TicketAttachmentAdded"] = "Anhang hinzugefügt",
+        ["TicketEscalated"] = "Eskaliert"
     };
 
     private readonly DbContext _db;
@@ -56,6 +57,8 @@ public sealed class GetTicketDetailQueryHandler
                 t.MachineOrWorkstation,
                 t.CreatedAtUtc,
                 t.DueAtUtc,
+                t.EscalationLevel,
+                t.FirstEscalatedAtUtc,
                 CreatedByDisplayName = u != null ? (u.FirstName + " " + u.LastName).Trim() : t.CreatedByUserId
             }
         ).FirstOrDefaultAsync(ct);
@@ -114,6 +117,8 @@ public sealed class GetTicketDetailQueryHandler
             detail.CreatedAtUtc,
             detail.DueAtUtc,
             dueState,
+            detail.EscalationLevel,
+            detail.FirstEscalatedAtUtc,
             detail.CreatedByDisplayName,
             comments,
             attachments,
@@ -211,6 +216,9 @@ public sealed class GetTicketDetailQueryHandler
             case "TicketAttachmentAdded":
                 return BuildAttachmentText(entry.Payload);
 
+            case "TicketEscalated":
+                return BuildEscalationText(entry.Payload);
+
             default:
                 return entry.EventType;
         }
@@ -262,6 +270,35 @@ public sealed class GetTicketDetailQueryHandler
         catch (JsonException) { }
 
         return "Anhang hinzugefügt";
+    }
+
+    private static string BuildEscalationText(string? payload)
+    {
+        if (string.IsNullOrEmpty(payload))
+            return "Eskaliert";
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            var level = doc.RootElement.TryGetProperty("EscalationLevel", out var lvl)
+                ? lvl.GetInt32()
+                : 1;
+
+            if (doc.RootElement.TryGetProperty("OverdueByMinutes", out var minutesProp))
+            {
+                var totalMinutes = minutesProp.GetInt32();
+                var duration = totalMinutes >= 60
+                    ? $"{totalMinutes / 60}h {totalMinutes % 60}min"
+                    : $"{totalMinutes}min";
+                return $"Eskaliert (Stufe {level}, {duration} überfällig)";
+            }
+
+            return $"Eskaliert (Stufe {level})";
+        }
+        catch (JsonException)
+        {
+            return "Eskaliert";
+        }
     }
 
     private static Guid? ExtractGuidFromPayload(string? payload, string propertyName)

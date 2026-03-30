@@ -8,6 +8,7 @@ using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketAttachment;
 using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketComment;
 using FactoryFlow.Modules.Tickets.Application.Commands.ChangeTicketStatus;
 using FactoryFlow.Modules.Tickets.Application.Commands.CreateTicket;
+using FactoryFlow.Modules.Tickets.Application.Commands.EscalateOverdueTickets;
 using FactoryFlow.Modules.Tickets.Application.Commands.UpdateTicket;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetOverdueTickets;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketCreationLookups;
@@ -81,6 +82,7 @@ try
     builder.Services.AddScoped<AddTicketCommentCommandHandler>();
     builder.Services.AddScoped<AddTicketAttachmentCommandHandler>();
     builder.Services.AddScoped<UpdateTicketCommandHandler>();
+    builder.Services.AddScoped<EscalateOverdueTicketsCommandHandler>();
     builder.Services.AddScoped<GetTicketCreationLookupsQueryHandler>();
     builder.Services.AddScoped<GetTicketsListQueryHandler>();
     builder.Services.AddScoped<GetTicketStatusLookupsQueryHandler>();
@@ -118,7 +120,9 @@ try
         app.UseExceptionHandler("/Error", createScopeForErrors: true);
     }
 
-    app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+    app.UseWhen(
+        context => !context.Request.Path.StartsWithSegments("/api"),
+        branch => branch.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
     app.UseAntiforgery();
     app.UseAuthentication();
     app.UseAuthorization();

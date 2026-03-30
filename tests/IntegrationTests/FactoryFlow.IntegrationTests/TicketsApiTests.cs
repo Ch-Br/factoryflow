@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using FactoryFlow.Modules.Identity;
 using FactoryFlow.Modules.Identity.Domain.Entities;
 using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketAttachment;
+using FactoryFlow.Modules.Tickets.Application.Commands.EscalateOverdueTickets;
 using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketComment;
 using FactoryFlow.Modules.Tickets.Application.Commands.ChangeTicketStatus;
 using FactoryFlow.Modules.Tickets.Application.Commands.CreateTicket;
@@ -33,7 +34,7 @@ public class TicketsApiTests : IClassFixture<FactoryFlowWebApplicationFactory>
     [Fact]
     public async Task CreateTicket_Unauthenticated_Returns401()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateClient(new() { AllowAutoRedirect = false });
 
         var response = await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
         {
@@ -924,6 +925,170 @@ public class TicketsApiTests : IClassFixture<FactoryFlowWebApplicationFactory>
         var response = await client.GetAsync("/api/tickets/overdue");
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task EscalateOverdueTickets_OpenOverdueTicket_GetsEscalated()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+        var ticketId = await CreateAndBackdateTicketAsync(client, "Escalation-HappyPath");
+
+        var response = await client.PostAsync("/api/tickets/escalate-overdue", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await response.Content.ReadFromJsonAsync<EscalateOverdueTicketsResponse>();
+        result.Should().NotBeNull();
+        result!.EscalatedCount.Should().BeGreaterThanOrEqualTo(1);
+
+        var detail = await client.GetFromJsonAsync<TicketDetailDto>($"/api/tickets/{ticketId}");
+        detail.Should().NotBeNull();
+        detail!.EscalationLevel.Should().Be(1);
+        detail.FirstEscalatedAtUtc.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task EscalateOverdueTickets_ClosedTicket_IsNotEscalated()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+
+        var createResponse = await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
+        {
+            Title = "Escalation-Closed",
+            Description = "Geschlossenes Ticket darf nicht eskaliert werden.",
+            TicketTypeId = TicketsSeedData.TypeGeneralRequestId,
+            PriorityId = TicketsSeedData.PriorityHighId,
+            DepartmentId = FactoryFlow.Modules.Identity.Infrastructure.Seeds.IdentitySeedData.ProductionDeptId,
+            DueAtUtc = DateTime.UtcNow.AddDays(1)
+        });
+        var createResult = await createResponse.Content.ReadFromJsonAsync<CreateTicketResponse>();
+
+        await client.PatchAsJsonAsync(
+            $"/api/tickets/{createResult!.TicketId}/status",
+            new ChangeTicketStatusCommand { NewStatusId = TicketsSeedData.StatusClosedId });
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FactoryFlowDbContext>();
+            var ticket = await db.Set<Ticket>().FindAsync(createResult.TicketId);
+            typeof(Ticket)
+                .GetProperty(nameof(Ticket.DueAtUtc))!
+                .SetValue(ticket, DateTime.UtcNow.AddHours(-3));
+            await db.SaveChangesAsync();
+        }
+
+        var response = await client.PostAsync("/api/tickets/escalate-overdue", null);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var detail = await client.GetFromJsonAsync<TicketDetailDto>($"/api/tickets/{createResult.TicketId}");
+        detail.Should().NotBeNull();
+        detail!.EscalationLevel.Should().Be(0);
+        detail.FirstEscalatedAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task EscalateOverdueTickets_TicketWithoutDueDate_IsNotEscalated()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+
+        var createResponse = await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
+        {
+            Title = "Escalation-NoDue",
+            Description = "Ticket ohne Faelligkeit darf nicht eskaliert werden.",
+            TicketTypeId = TicketsSeedData.TypeGeneralRequestId,
+            PriorityId = TicketsSeedData.PriorityMediumId,
+            DepartmentId = FactoryFlow.Modules.Identity.Infrastructure.Seeds.IdentitySeedData.ProductionDeptId
+        });
+        var createResult = await createResponse.Content.ReadFromJsonAsync<CreateTicketResponse>();
+
+        var response = await client.PostAsync("/api/tickets/escalate-overdue", null);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var detail = await client.GetFromJsonAsync<TicketDetailDto>($"/api/tickets/{createResult!.TicketId}");
+        detail.Should().NotBeNull();
+        detail!.EscalationLevel.Should().Be(0);
+        detail.FirstEscalatedAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task EscalateOverdueTickets_AlreadyEscalated_IsNotEscalatedAgain()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+        var ticketId = await CreateAndBackdateTicketAsync(client, "Escalation-AlreadyEscalated");
+
+        var firstResponse = await client.PostAsync("/api/tickets/escalate-overdue", null);
+        firstResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        DateTime? firstEscalatedAt;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FactoryFlowDbContext>();
+            var ticket = await db.Set<Ticket>().FindAsync(ticketId);
+            firstEscalatedAt = ticket!.FirstEscalatedAtUtc;
+        }
+
+        firstEscalatedAt.Should().NotBeNull();
+
+        var secondResponse = await client.PostAsync("/api/tickets/escalate-overdue", null);
+        secondResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var detail = await client.GetFromJsonAsync<TicketDetailDto>($"/api/tickets/{ticketId}");
+        detail.Should().NotBeNull();
+        detail!.EscalationLevel.Should().Be(1);
+        detail.FirstEscalatedAtUtc.Should().Be(firstEscalatedAt);
+    }
+
+    [Fact]
+    public async Task EscalateOverdueTickets_CreatesAuditEntryAndHistoryItem()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+        var ticketId = await CreateAndBackdateTicketAsync(client, "Escalation-Audit");
+
+        await client.PostAsync("/api/tickets/escalate-overdue", null);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FactoryFlowDbContext>();
+        var audit = await db.AuditEntries
+            .Where(a => a.EntityId == ticketId.ToString()
+                        && a.EventType == "TicketEscalated")
+            .FirstOrDefaultAsync();
+
+        audit.Should().NotBeNull();
+        audit!.Payload.Should().Contain("EscalationLevel");
+        audit.Payload.Should().Contain("OverdueByMinutes");
+
+        var detail = await client.GetFromJsonAsync<TicketDetailDto>($"/api/tickets/{ticketId}");
+        detail.Should().NotBeNull();
+        detail!.History.Should().Contain(h => h.EventType == "TicketEscalated");
+        var escalationEvent = detail.History.First(h => h.EventType == "TicketEscalated");
+        escalationEvent.Text.Should().NotBeNullOrWhiteSpace();
+    }
+
+    private async Task<Guid> CreateAndBackdateTicketAsync(HttpClient client, string title)
+    {
+        var createResponse = await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
+        {
+            Title = title,
+            Description = $"Integrationtest: {title}",
+            TicketTypeId = TicketsSeedData.TypeGeneralRequestId,
+            PriorityId = TicketsSeedData.PriorityHighId,
+            DepartmentId = FactoryFlow.Modules.Identity.Infrastructure.Seeds.IdentitySeedData.ProductionDeptId,
+            DueAtUtc = DateTime.UtcNow.AddDays(1)
+        });
+
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var createResult = await createResponse.Content.ReadFromJsonAsync<CreateTicketResponse>();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FactoryFlowDbContext>();
+            var ticket = await db.Set<Ticket>().FindAsync(createResult!.TicketId);
+            typeof(Ticket)
+                .GetProperty(nameof(Ticket.DueAtUtc))!
+                .SetValue(ticket, DateTime.UtcNow.AddHours(-3));
+            await db.SaveChangesAsync();
+        }
+
+        return createResult!.TicketId;
     }
 
     private async Task<HttpClient> CreateAuthenticatedClientAsync()

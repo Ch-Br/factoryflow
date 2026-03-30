@@ -31,7 +31,8 @@ public sealed class GetOverdueTicketsQueryHandler
                 PriorityName = t.Priority!.Name,
                 StatusName = t.Status!.Name,
                 DueAtUtc = t.DueAtUtc!.Value,
-                t.CreatedAtUtc
+                t.CreatedAtUtc,
+                t.EscalationLevel
             })
             .ToListAsync(ct);
 
@@ -44,7 +45,8 @@ public sealed class GetOverdueTicketsQueryHandler
             t.StatusName,
             t.DueAtUtc,
             utcNow - t.DueAtUtc,
-            t.CreatedAtUtc
+            t.CreatedAtUtc,
+            t.EscalationLevel
         )).ToList();
 
         return new OverdueTicketsResultDto(items, items.Count);

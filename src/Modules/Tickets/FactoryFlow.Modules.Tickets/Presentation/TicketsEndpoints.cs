@@ -3,6 +3,7 @@ using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketAttachment;
 using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketComment;
 using FactoryFlow.Modules.Tickets.Application.Commands.ChangeTicketStatus;
 using FactoryFlow.Modules.Tickets.Application.Commands.CreateTicket;
+using FactoryFlow.Modules.Tickets.Application.Commands.EscalateOverdueTickets;
 using FactoryFlow.Modules.Tickets.Application.Commands.UpdateTicket;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetOverdueTickets;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketCreationLookups;
@@ -33,6 +34,12 @@ public static class TicketsEndpoints
         group.MapGet("/overdue", GetOverdueTicketsAsync)
             .WithName("GetOverdueTickets")
             .Produces<OverdueTicketsResultDto>()
+            .RequireAuthorization(AuthPolicies.TicketsManage);
+
+        group.MapPost("/escalate-overdue", EscalateOverdueTicketsAsync)
+            .WithName("EscalateOverdueTickets")
+            .Produces<EscalateOverdueTicketsResponse>()
+            .Produces(StatusCodes.Status401Unauthorized)
             .RequireAuthorization(AuthPolicies.TicketsManage);
 
         group.MapGet("/{id:guid}", GetTicketDetailAsync)
@@ -129,6 +136,21 @@ public static class TicketsEndpoints
     {
         var result = await handler.HandleAsync(ct);
         return Results.Ok(result);
+    }
+
+    private static async Task<IResult> EscalateOverdueTicketsAsync(
+        EscalateOverdueTicketsCommandHandler handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(ct);
+
+        if (!result.Succeeded)
+        {
+            return Results.ValidationProblem(
+                new Dictionary<string, string[]> { [""] = result.Errors.ToArray() });
+        }
+
+        return Results.Ok(result.Value);
     }
 
     private static async Task<IResult> GetTicketDetailAsync(

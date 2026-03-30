@@ -16,6 +16,8 @@ public sealed record TicketDetailDto(
     DateTime CreatedAtUtc,
     DateTime? DueAtUtc,
     string DueState,
+    int EscalationLevel,
+    DateTime? FirstEscalatedAtUtc,
     string CreatedByDisplayName,
     IReadOnlyList<TicketCommentDto> Comments,
     IReadOnlyList<TicketAttachmentDto> Attachments,

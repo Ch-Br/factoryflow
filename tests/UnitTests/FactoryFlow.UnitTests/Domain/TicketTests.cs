@@ -295,6 +295,39 @@ public class TicketTests
         ticket.DueAtUtc.Should().Be(due);
     }
 
+    [Fact]
+    public void Escalate_SetsLevel1_AndTimestamp()
+    {
+        var ticket = CreateValidTicket();
+        var utcNow = new DateTime(2026, 3, 30, 12, 0, 0, DateTimeKind.Utc);
+
+        ticket.Escalate(utcNow);
+
+        ticket.EscalationLevel.Should().Be(1);
+        ticket.FirstEscalatedAtUtc.Should().Be(utcNow);
+    }
+
+    [Fact]
+    public void Escalate_AlreadyEscalated_ThrowsInvalidOperationException()
+    {
+        var ticket = CreateValidTicket();
+        ticket.Escalate(DateTime.UtcNow);
+
+        var act = () => ticket.Escalate(DateTime.UtcNow);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*bereits eskaliert*");
+    }
+
+    [Fact]
+    public void Create_DefaultEscalationLevel_IsZero()
+    {
+        var ticket = CreateValidTicket();
+
+        ticket.EscalationLevel.Should().Be(0);
+        ticket.FirstEscalatedAtUtc.Should().BeNull();
+    }
+
     private static Ticket CreateValidTicket(Guid? statusNewId = null)
     {
         return Ticket.Create(

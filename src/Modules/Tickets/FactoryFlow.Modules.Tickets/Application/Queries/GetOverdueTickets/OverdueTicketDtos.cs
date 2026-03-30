@@ -9,7 +9,8 @@ public sealed record OverdueTicketDto(
     string StatusName,
     DateTime DueAtUtc,
     TimeSpan OverdueBy,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    int EscalationLevel);
 
 public sealed record OverdueTicketsResultDto(
     IReadOnlyList<OverdueTicketDto> Items,

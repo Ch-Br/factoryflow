@@ -26,6 +26,12 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
 
         builder.Property(t => t.DueAtUtc).IsRequired(false);
 
+        builder.Property(t => t.EscalationLevel)
+            .HasDefaultValue(0)
+            .IsRequired();
+
+        builder.Property(t => t.FirstEscalatedAtUtc).IsRequired(false);
+
         builder.HasOne(t => t.TicketType)
             .WithMany()
             .HasForeignKey(t => t.TicketTypeId)
@@ -44,5 +50,6 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.HasIndex(t => t.DepartmentId);
         builder.HasIndex(t => t.StatusId);
         builder.HasIndex(t => t.CreatedAtUtc);
+        builder.HasIndex(t => t.EscalationLevel);
     }
 }
