@@ -1,5 +1,9 @@
 using FactoryFlow.Modules.Audit.Application;
 using FactoryFlow.Modules.Audit.Infrastructure.Services;
+using FactoryFlow.Modules.Notifications.Application;
+using FactoryFlow.Modules.Notifications.Application.Commands.MarkNotificationRead;
+using FactoryFlow.Modules.Notifications.Application.Queries.GetMyNotifications;
+using FactoryFlow.Modules.Notifications.Infrastructure.Services;
 using FactoryFlow.Modules.Identity;
 using FactoryFlow.Modules.Identity.Domain.Entities;
 using FactoryFlow.Modules.Identity.Infrastructure.Seeds;
@@ -92,6 +96,11 @@ try
     // --- File storage ---
     builder.Services.AddSingleton<IFileStorage, LocalDiskFileStorage>();
 
+    // --- Notifications module ---
+    builder.Services.AddScoped<IEscalationNotificationPublisher, EscalationNotificationPublisher>();
+    builder.Services.AddScoped<GetMyNotificationsQueryHandler>();
+    builder.Services.AddScoped<MarkNotificationReadCommandHandler>();
+
     // --- Audit module ---
     builder.Services.AddScoped<IAuditWriter, AuditWriter>();
 
@@ -131,6 +140,7 @@ try
 
     // Map API endpoints
     FactoryFlow.Modules.Tickets.Presentation.TicketsEndpoints.Map(app);
+    FactoryFlow.Modules.Notifications.Presentation.NotificationsEndpoints.Map(app);
 
     app.MapRazorComponents<App>()
         .AddInteractiveServerRenderMode();

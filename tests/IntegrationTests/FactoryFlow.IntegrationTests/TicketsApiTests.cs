@@ -6,6 +6,8 @@ using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketAttachment;
 using FactoryFlow.Modules.Tickets.Application.Commands.EscalateOverdueTickets;
 using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketComment;
 using FactoryFlow.Modules.Tickets.Application.Commands.ChangeTicketStatus;
+using FactoryFlow.Modules.Notifications.Application.Queries.GetMyNotifications;
+using FactoryFlow.Modules.Notifications.Domain.Entities;
 using FactoryFlow.Modules.Tickets.Application.Commands.CreateTicket;
 using FactoryFlow.Modules.Tickets.Application.Commands.UpdateTicket;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetOverdueTickets;
@@ -1061,6 +1063,63 @@ public class TicketsApiTests : IClassFixture<FactoryFlowWebApplicationFactory>
         detail!.History.Should().Contain(h => h.EventType == "TicketEscalated");
         var escalationEvent = detail.History.First(h => h.EventType == "TicketEscalated");
         escalationEvent.Text.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task EscalateOverdueTickets_CreatesNotificationsForSupervisorAndAdmin()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+        var ticketId = await CreateAndBackdateTicketAsync(client, "Escalation-Notification");
+
+        await client.PostAsync("/api/tickets/escalate-overdue", null);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FactoryFlowDbContext>();
+
+        var notifications = await db.InternalNotifications
+            .Where(n => n.TicketId == ticketId && n.NotificationType == "TicketEscalated")
+            .ToListAsync();
+
+        notifications.Should().NotBeEmpty();
+        notifications.Should().AllSatisfy(n =>
+        {
+            n.EscalationLevel.Should().Be(1);
+            n.TicketNumber.Should().NotBeNullOrWhiteSpace();
+            n.Title.Should().Be("Escalation-Notification");
+            n.CreatedAtUtc.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+            n.ReadAtUtc.Should().BeNull();
+        });
+    }
+
+    [Fact]
+    public async Task GetMyNotifications_AfterEscalation_ReturnsNotifications()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+        await CreateAndBackdateTicketAsync(client, "Notification-API-Test");
+        await client.PostAsync("/api/tickets/escalate-overdue", null);
+
+        var result = await client.GetFromJsonAsync<NotificationListResultDto>("/api/notifications");
+
+        result.Should().NotBeNull();
+        result!.Items.Should().Contain(n => n.Title == "Notification-API-Test");
+    }
+
+    [Fact]
+    public async Task MarkNotificationRead_OwnNotification_Returns204()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+        await CreateAndBackdateTicketAsync(client, "MarkRead-Test");
+        await client.PostAsync("/api/tickets/escalate-overdue", null);
+
+        var notifications = await client.GetFromJsonAsync<NotificationListResultDto>("/api/notifications");
+        var notification = notifications!.Items.First(n => n.Title == "MarkRead-Test");
+        notification.ReadAtUtc.Should().BeNull();
+
+        var response = await client.PostAsync($"/api/notifications/{notification.Id}/read", null);
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var updated = await client.GetFromJsonAsync<NotificationListResultDto>("/api/notifications");
+        updated!.Items.First(n => n.Id == notification.Id).ReadAtUtc.Should().NotBeNull();
     }
 
     private async Task<Guid> CreateAndBackdateTicketAsync(HttpClient client, string title)

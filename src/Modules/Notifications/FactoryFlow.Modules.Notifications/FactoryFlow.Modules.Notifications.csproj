@@ -12,9 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\SharedKernel\FactoryFlow.SharedKernel\FactoryFlow.SharedKernel.csproj" />
-    <ProjectReference Include="..\..\Audit\FactoryFlow.Modules.Audit\FactoryFlow.Modules.Audit.csproj" />
     <ProjectReference Include="..\..\Identity\FactoryFlow.Modules.Identity\FactoryFlow.Modules.Identity.csproj" />
-    <ProjectReference Include="..\..\Notifications\FactoryFlow.Modules.Notifications\FactoryFlow.Modules.Notifications.csproj" />
   </ItemGroup>
 
   <ItemGroup>

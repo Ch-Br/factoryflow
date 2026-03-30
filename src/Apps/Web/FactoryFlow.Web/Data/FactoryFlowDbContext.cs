@@ -2,6 +2,8 @@ using FactoryFlow.Modules.Audit.Domain.Entities;
 using FactoryFlow.Modules.Audit.Infrastructure.Configurations;
 using FactoryFlow.Modules.Identity.Domain.Entities;
 using FactoryFlow.Modules.Identity.Infrastructure.Configurations;
+using FactoryFlow.Modules.Notifications.Domain.Entities;
+using FactoryFlow.Modules.Notifications.Infrastructure.Configurations;
 using FactoryFlow.Modules.Identity.Infrastructure.Seeds;
 using FactoryFlow.Modules.Tickets.Domain.Entities;
 using FactoryFlow.Modules.Tickets.Infrastructure.Configurations;
@@ -27,6 +29,7 @@ public class FactoryFlowDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<TicketStatus> TicketStatuses => Set<TicketStatus>();
 
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
+    public DbSet<InternalNotification> InternalNotifications => Set<InternalNotification>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -47,6 +50,9 @@ public class FactoryFlowDbContext : IdentityDbContext<ApplicationUser>
         builder.ApplyConfiguration(new TicketPriorityConfiguration());
         builder.ApplyConfiguration(new TicketStatusConfiguration());
         TicketsSeedData.Seed(builder);
+
+        // Notifications module
+        builder.ApplyConfiguration(new InternalNotificationConfiguration());
 
         // Audit module
         builder.ApplyConfiguration(new AuditEntryConfiguration());

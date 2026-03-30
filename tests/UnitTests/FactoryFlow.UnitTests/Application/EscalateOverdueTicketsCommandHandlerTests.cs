@@ -1,5 +1,6 @@
 using FactoryFlow.Modules.Audit.Application;
 using FactoryFlow.Modules.Identity;
+using FactoryFlow.Modules.Notifications.Application;
 using FactoryFlow.Modules.Tickets.Application.Commands.EscalateOverdueTickets;
 using FactoryFlow.Modules.Tickets.Domain.Entities;
 using FactoryFlow.Modules.Tickets.Infrastructure.Seeds;
@@ -185,6 +186,46 @@ public class EscalateOverdueTicketsCommandHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task HandleAsync_PublishesNotifications()
+    {
+        _db.Set<Ticket>().Add(
+            CreateTicket("Notification-Test", DateTime.UtcNow.AddDays(-2),
+                dueAtUtc: DateTime.UtcNow.AddHours(-3)));
+        await _db.SaveChangesAsync();
+
+        var publisher = Substitute.For<IEscalationNotificationPublisher>();
+        var handler = CreateHandler(notificationPublisher: publisher);
+
+        await handler.HandleAsync();
+
+        await publisher.Received(1).PublishAsync(
+            Arg.Is<IReadOnlyList<EscalatedTicketInfo>>(list =>
+                list.Count == 1
+                && list[0].Title == "Notification-Test"
+                && list[0].EscalationLevel == 1),
+            Arg.Any<DateTime>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_NoCandidates_DoesNotPublishNotifications()
+    {
+        _db.Set<Ticket>().Add(
+            CreateTicket("Kein DueDate", DateTime.UtcNow.AddDays(-1)));
+        await _db.SaveChangesAsync();
+
+        var publisher = Substitute.For<IEscalationNotificationPublisher>();
+        var handler = CreateHandler(notificationPublisher: publisher);
+
+        await handler.HandleAsync();
+
+        await publisher.DidNotReceive().PublishAsync(
+            Arg.Any<IReadOnlyList<EscalatedTicketInfo>>(),
+            Arg.Any<DateTime>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task HandleAsync_MixedTickets_OnlyEscalatesQualifying()
     {
         _db.Set<Ticket>().AddRange(
@@ -212,13 +253,15 @@ public class EscalateOverdueTicketsCommandHandlerTests : IDisposable
 
     private EscalateOverdueTicketsCommandHandler CreateHandler(
         ICurrentUserService? currentUser = null,
-        IAuditWriter? auditWriter = null)
+        IAuditWriter? auditWriter = null,
+        IEscalationNotificationPublisher? notificationPublisher = null)
     {
         currentUser ??= CreateAuthenticatedUser(AppRoles.Supervisor);
         auditWriter ??= Substitute.For<IAuditWriter>();
+        notificationPublisher ??= Substitute.For<IEscalationNotificationPublisher>();
         var logger = Substitute.For<ILogger<EscalateOverdueTicketsCommandHandler>>();
 
-        return new EscalateOverdueTicketsCommandHandler(_db, currentUser, auditWriter, logger);
+        return new EscalateOverdueTicketsCommandHandler(_db, currentUser, auditWriter, notificationPublisher, logger);
     }
 
     private static ICurrentUserService CreateAuthenticatedUser(string role)

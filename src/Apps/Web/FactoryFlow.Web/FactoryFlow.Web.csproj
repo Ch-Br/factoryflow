@@ -5,6 +5,7 @@
     <ProjectReference Include="..\..\..\Modules\Identity\FactoryFlow.Modules.Identity\FactoryFlow.Modules.Identity.csproj" />
     <ProjectReference Include="..\..\..\Modules\Tickets\FactoryFlow.Modules.Tickets\FactoryFlow.Modules.Tickets.csproj" />
     <ProjectReference Include="..\..\..\Modules\Audit\FactoryFlow.Modules.Audit\FactoryFlow.Modules.Audit.csproj" />
+    <ProjectReference Include="..\..\..\Modules\Notifications\FactoryFlow.Modules.Notifications\FactoryFlow.Modules.Notifications.csproj" />
   </ItemGroup>
 
   <ItemGroup>

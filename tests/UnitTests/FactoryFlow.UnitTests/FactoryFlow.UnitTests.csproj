@@ -27,6 +27,7 @@
     <ProjectReference Include="..\..\..\src\Modules\Tickets\FactoryFlow.Modules.Tickets\FactoryFlow.Modules.Tickets.csproj" />
     <ProjectReference Include="..\..\..\src\Modules\Identity\FactoryFlow.Modules.Identity\FactoryFlow.Modules.Identity.csproj" />
     <ProjectReference Include="..\..\..\src\Modules\Audit\FactoryFlow.Modules.Audit\FactoryFlow.Modules.Audit.csproj" />
+    <ProjectReference Include="..\..\..\src\Modules\Notifications\FactoryFlow.Modules.Notifications\FactoryFlow.Modules.Notifications.csproj" />
     <ProjectReference Include="..\..\..\src\SharedKernel\FactoryFlow.SharedKernel\FactoryFlow.SharedKernel.csproj" />
   </ItemGroup>
 

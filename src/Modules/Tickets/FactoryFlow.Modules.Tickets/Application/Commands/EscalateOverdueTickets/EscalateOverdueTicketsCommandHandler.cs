@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FactoryFlow.Modules.Audit.Application;
 using FactoryFlow.Modules.Identity;
+using FactoryFlow.Modules.Notifications.Application;
 using FactoryFlow.Modules.Tickets.Domain.Entities;
 using FactoryFlow.Modules.Tickets.Infrastructure.Seeds;
 using FactoryFlow.SharedKernel.Application;
@@ -15,17 +16,20 @@ public sealed class EscalateOverdueTicketsCommandHandler
     private readonly DbContext _db;
     private readonly ICurrentUserService _currentUser;
     private readonly IAuditWriter _auditWriter;
+    private readonly IEscalationNotificationPublisher _notificationPublisher;
     private readonly ILogger<EscalateOverdueTicketsCommandHandler> _logger;
 
     public EscalateOverdueTicketsCommandHandler(
         DbContext db,
         ICurrentUserService currentUser,
         IAuditWriter auditWriter,
+        IEscalationNotificationPublisher notificationPublisher,
         ILogger<EscalateOverdueTicketsCommandHandler> logger)
     {
         _db = db;
         _currentUser = currentUser;
         _auditWriter = auditWriter;
+        _notificationPublisher = notificationPublisher;
         _logger = logger;
     }
 
@@ -81,6 +85,10 @@ public sealed class EscalateOverdueTicketsCommandHandler
                     payload: payload,
                     ct: ct);
             }
+
+            var escalatedInfos = candidates.Select(t => new EscalatedTicketInfo(
+                t.Id, t.TicketNumber, t.Title, t.EscalationLevel)).ToList();
+            await _notificationPublisher.PublishAsync(escalatedInfos, utcNow, ct);
 
             await transaction.CommitAsync(ct);
 

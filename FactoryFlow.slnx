@@ -11,6 +11,9 @@
   <Folder Name="/src/Modules/Identity/">
     <Project Path="src/Modules/Identity/FactoryFlow.Modules.Identity/FactoryFlow.Modules.Identity.csproj" />
   </Folder>
+  <Folder Name="/src/Modules/Notifications/">
+    <Project Path="src/Modules/Notifications/FactoryFlow.Modules.Notifications/FactoryFlow.Modules.Notifications.csproj" />
+  </Folder>
   <Folder Name="/src/Modules/Tickets/">
     <Project Path="src/Modules/Tickets/FactoryFlow.Modules.Tickets/FactoryFlow.Modules.Tickets.csproj" />
   </Folder>
