@@ -3,6 +3,7 @@ using FactoryFlow.Modules.Audit.Infrastructure.Services;
 using FactoryFlow.Modules.Identity.Domain.Entities;
 using FactoryFlow.Modules.Identity.Infrastructure.Seeds;
 using FactoryFlow.Modules.Identity.Services;
+using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketAttachment;
 using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketComment;
 using FactoryFlow.Modules.Tickets.Application.Commands.ChangeTicketStatus;
 using FactoryFlow.Modules.Tickets.Application.Commands.CreateTicket;
@@ -14,6 +15,8 @@ using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketsList;
 using FactoryFlow.Modules.Tickets.Domain.Services;
 using FactoryFlow.Modules.Tickets.Infrastructure.Services;
 using FactoryFlow.SharedKernel.Domain;
+using FactoryFlow.SharedKernel.Infrastructure;
+using FactoryFlow.Web.Infrastructure;
 using FactoryFlow.Web.Components;
 using FactoryFlow.Web.Data;
 using Microsoft.AspNetCore.Identity;
@@ -65,11 +68,15 @@ try
     builder.Services.AddScoped<CreateTicketCommandHandler>();
     builder.Services.AddScoped<ChangeTicketStatusCommandHandler>();
     builder.Services.AddScoped<AddTicketCommentCommandHandler>();
+    builder.Services.AddScoped<AddTicketAttachmentCommandHandler>();
     builder.Services.AddScoped<UpdateTicketCommandHandler>();
     builder.Services.AddScoped<GetTicketCreationLookupsQueryHandler>();
     builder.Services.AddScoped<GetTicketsListQueryHandler>();
     builder.Services.AddScoped<GetTicketStatusLookupsQueryHandler>();
     builder.Services.AddScoped<GetTicketDetailQueryHandler>();
+
+    // --- File storage ---
+    builder.Services.AddSingleton<IFileStorage, LocalDiskFileStorage>();
 
     // --- Audit module ---
     builder.Services.AddScoped<IAuditWriter, AuditWriter>();

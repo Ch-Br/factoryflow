@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using FactoryFlow.Modules.Identity.Domain.Entities;
+using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketAttachment;
 using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketComment;
 using FactoryFlow.Modules.Tickets.Application.Commands.ChangeTicketStatus;
 using FactoryFlow.Modules.Tickets.Application.Commands.CreateTicket;
@@ -555,6 +556,121 @@ public class TicketsApiTests : IClassFixture<FactoryFlowWebApplicationFactory>
             .FirstOrDefaultAsync();
 
         audit.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task UploadAttachment_WithValidFile_Returns201()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+
+        var createResponse = await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
+        {
+            Title = "Attachment-Test",
+            Description = "Ticket für Attachment-Upload.",
+            TicketTypeId = TicketsSeedData.TypeGeneralRequestId,
+            PriorityId = TicketsSeedData.PriorityMediumId,
+            DepartmentId = FactoryFlow.Modules.Identity.Infrastructure.Seeds.IdentitySeedData.ProductionDeptId
+        });
+
+        var createResult = await createResponse.Content.ReadFromJsonAsync<CreateTicketResponse>();
+
+        using var fileContent = new ByteArrayContent([1, 2, 3, 4, 5]);
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/pdf");
+        using var form = new MultipartFormDataContent();
+        form.Add(fileContent, "file", "test.pdf");
+
+        var uploadResponse = await client.PostAsync(
+            $"/api/tickets/{createResult!.TicketId}/attachments", form);
+
+        uploadResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var uploadResult = await uploadResponse.Content.ReadFromJsonAsync<AddTicketAttachmentResponse>();
+        uploadResult.Should().NotBeNull();
+        uploadResult!.FileName.Should().Be("test.pdf");
+    }
+
+    [Fact]
+    public async Task UploadAttachment_NonExistentTicket_Returns404()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+
+        using var fileContent = new ByteArrayContent([1, 2, 3]);
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/plain");
+        using var form = new MultipartFormDataContent();
+        form.Add(fileContent, "file", "test.txt");
+
+        var uploadResponse = await client.PostAsync(
+            $"/api/tickets/{Guid.NewGuid()}/attachments", form);
+
+        uploadResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task DownloadAttachment_ExistingFile_ReturnsFileContent()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+
+        var createResponse = await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
+        {
+            Title = "Download-Test",
+            Description = "Ticket für Download-Test.",
+            TicketTypeId = TicketsSeedData.TypeGeneralRequestId,
+            PriorityId = TicketsSeedData.PriorityMediumId,
+            DepartmentId = FactoryFlow.Modules.Identity.Infrastructure.Seeds.IdentitySeedData.ProductionDeptId
+        });
+
+        var createResult = await createResponse.Content.ReadFromJsonAsync<CreateTicketResponse>();
+
+        var fileBytes = new byte[] { 10, 20, 30, 40, 50 };
+        using var fileContent = new ByteArrayContent(fileBytes);
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        using var form = new MultipartFormDataContent();
+        form.Add(fileContent, "file", "data.bin");
+
+        var uploadResponse = await client.PostAsync(
+            $"/api/tickets/{createResult!.TicketId}/attachments", form);
+        var uploadResult = await uploadResponse.Content.ReadFromJsonAsync<AddTicketAttachmentResponse>();
+
+        var downloadResponse = await client.GetAsync(
+            $"/api/tickets/{createResult.TicketId}/attachments/{uploadResult!.AttachmentId}");
+
+        downloadResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var downloadedBytes = await downloadResponse.Content.ReadAsByteArrayAsync();
+        downloadedBytes.Should().BeEquivalentTo(fileBytes);
+    }
+
+    [Fact]
+    public async Task UploadAttachment_CreatesAuditEntry()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+
+        var createResponse = await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
+        {
+            Title = "Attach-Audit-Test",
+            Description = "Prüfe ob Audit bei Upload geschrieben wird.",
+            TicketTypeId = TicketsSeedData.TypeGeneralRequestId,
+            PriorityId = TicketsSeedData.PriorityLowId,
+            DepartmentId = FactoryFlow.Modules.Identity.Infrastructure.Seeds.IdentitySeedData.ProductionDeptId
+        });
+
+        var createResult = await createResponse.Content.ReadFromJsonAsync<CreateTicketResponse>();
+
+        using var fileContent = new ByteArrayContent([1, 2, 3]);
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/pdf");
+        using var form = new MultipartFormDataContent();
+        form.Add(fileContent, "file", "audit-test.pdf");
+
+        await client.PostAsync($"/api/tickets/{createResult!.TicketId}/attachments", form);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FactoryFlowDbContext>();
+        var audit = await db.AuditEntries
+            .Where(a => a.EntityId == createResult.TicketId.ToString()
+                        && a.EventType == "TicketAttachmentAdded")
+            .FirstOrDefaultAsync();
+
+        audit.Should().NotBeNull();
+        audit!.Payload.Should().Contain("audit-test.pdf");
     }
 
     private async Task<HttpClient> CreateAuthenticatedClientAsync()

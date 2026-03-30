@@ -9,14 +9,15 @@ namespace FactoryFlow.Modules.Tickets.Application.Queries.GetTicketDetail;
 public sealed class GetTicketDetailQueryHandler
 {
     private static readonly string[] RelevantEventTypes =
-        ["TicketCreated", "TicketStatusChanged", "TicketCommentAdded", "TicketUpdated"];
+        ["TicketCreated", "TicketStatusChanged", "TicketCommentAdded", "TicketUpdated", "TicketAttachmentAdded"];
 
     private static readonly Dictionary<string, string> EventLabels = new()
     {
         ["TicketCreated"] = "Ticket erstellt",
         ["TicketStatusChanged"] = "Status geändert",
         ["TicketCommentAdded"] = "Kommentar hinzugefügt",
-        ["TicketUpdated"] = "Ticket bearbeitet"
+        ["TicketUpdated"] = "Ticket bearbeitet",
+        ["TicketAttachmentAdded"] = "Anhang hinzugefügt"
     };
 
     private readonly DbContext _db;
@@ -72,6 +73,21 @@ public sealed class GetTicketDetailQueryHandler
                 u != null ? (u.FirstName + " " + u.LastName).Trim() : c.CreatedByUserId)
         ).ToListAsync(ct);
 
+        var attachments = await (
+            from a in _db.Set<TicketAttachment>()
+            join u in _db.Set<ApplicationUser>() on a.CreatedByUserId equals u.Id into users
+            from u in users.DefaultIfEmpty()
+            where a.TicketId == ticketId
+            orderby a.CreatedAtUtc descending
+            select new TicketAttachmentDto(
+                a.Id,
+                a.FileName,
+                a.ContentType,
+                a.FileSize,
+                a.CreatedAtUtc,
+                u != null ? (u.FirstName + " " + u.LastName).Trim() : a.CreatedByUserId)
+        ).ToListAsync(ct);
+
         var history = await BuildHistoryAsync(ticketId, ct);
 
         return new TicketDetailDto(
@@ -90,6 +106,7 @@ public sealed class GetTicketDetailQueryHandler
             detail.CreatedAtUtc,
             detail.CreatedByDisplayName,
             comments,
+            attachments,
             history);
     }
 
@@ -181,6 +198,9 @@ public sealed class GetTicketDetailQueryHandler
             case "TicketUpdated":
                 return BuildUpdateText(entry.Payload);
 
+            case "TicketAttachmentAdded":
+                return BuildAttachmentText(entry.Payload);
+
             default:
                 return entry.EventType;
         }
@@ -211,6 +231,25 @@ public sealed class GetTicketDetailQueryHandler
         {
             return "Ticket bearbeitet";
         }
+    }
+
+    private static string BuildAttachmentText(string? payload)
+    {
+        if (string.IsNullOrEmpty(payload))
+            return "Anhang hinzugefügt";
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            if (doc.RootElement.TryGetProperty("FileName", out var fileNameProp)
+                && fileNameProp.ValueKind == JsonValueKind.String)
+            {
+                return $"Datei: {fileNameProp.GetString()}";
+            }
+        }
+        catch (JsonException) { }
+
+        return "Anhang hinzugefügt";
     }
 
     private static Guid? ExtractGuidFromPayload(string? payload, string propertyName)

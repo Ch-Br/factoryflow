@@ -1,3 +1,4 @@
+using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketAttachment;
 using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketComment;
 using FactoryFlow.Modules.Tickets.Application.Commands.ChangeTicketStatus;
 using FactoryFlow.Modules.Tickets.Application.Commands.CreateTicket;
@@ -5,9 +6,12 @@ using FactoryFlow.Modules.Tickets.Application.Commands.UpdateTicket;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketCreationLookups;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketDetail;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketsList;
+using FactoryFlow.Modules.Tickets.Domain.Entities;
+using FactoryFlow.SharedKernel.Infrastructure;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
 
 namespace FactoryFlow.Modules.Tickets.Presentation;
 
@@ -58,6 +62,19 @@ public static class TicketsEndpoints
             .ProducesValidationProblem()
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status401Unauthorized);
+
+        group.MapPost("/{id:guid}/attachments", UploadAttachmentAsync)
+            .WithName("UploadAttachment")
+            .Produces<AddTicketAttachmentResponse>(StatusCodes.Status201Created)
+            .ProducesValidationProblem()
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .DisableAntiforgery();
+
+        group.MapGet("/{id:guid}/attachments/{attachmentId:guid}", DownloadAttachmentAsync)
+            .WithName("DownloadAttachment")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
     }
 
     private static async Task<IResult> CreateTicketAsync(
@@ -157,5 +174,59 @@ public static class TicketsEndpoints
         }
 
         return Results.Created($"/api/tickets/{id}/comments/{result.Value!.CommentId}", result.Value);
+    }
+
+    private static async Task<IResult> UploadAttachmentAsync(
+        Guid id,
+        IFormFile file,
+        AddTicketAttachmentCommandHandler handler,
+        CancellationToken ct)
+    {
+        await using var stream = file.OpenReadStream();
+        var command = new AddTicketAttachmentCommand
+        {
+            FileName = file.FileName,
+            ContentType = file.ContentType,
+            FileSize = file.Length,
+            Content = stream
+        };
+
+        var result = await handler.HandleAsync(id, command, ct);
+
+        if (!result.Succeeded)
+        {
+            if (result.Errors.Any(e => e.Contains("nicht gefunden")))
+                return Results.NotFound();
+
+            return Results.ValidationProblem(
+                new Dictionary<string, string[]> { [""] = result.Errors.ToArray() });
+        }
+
+        return Results.Created(
+            $"/api/tickets/{id}/attachments/{result.Value!.AttachmentId}", result.Value);
+    }
+
+    private static async Task<IResult> DownloadAttachmentAsync(
+        Guid id,
+        Guid attachmentId,
+        DbContext db,
+        IFileStorage fileStorage,
+        CancellationToken ct)
+    {
+        var attachment = await db.Set<TicketAttachment>()
+            .FirstOrDefaultAsync(a => a.Id == attachmentId && a.TicketId == id, ct);
+
+        if (attachment is null)
+            return Results.NotFound();
+
+        try
+        {
+            var stream = await fileStorage.LoadAsync(attachment.StorageKey, ct);
+            return Results.File(stream, attachment.ContentType, attachment.FileName);
+        }
+        catch (FileNotFoundException)
+        {
+            return Results.NotFound();
+        }
     }
 }

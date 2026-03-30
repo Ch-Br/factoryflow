@@ -16,11 +16,20 @@ public sealed record TicketDetailDto(
     DateTime CreatedAtUtc,
     string CreatedByDisplayName,
     IReadOnlyList<TicketCommentDto> Comments,
+    IReadOnlyList<TicketAttachmentDto> Attachments,
     IReadOnlyList<TicketHistoryItemDto> History);
 
 public sealed record TicketCommentDto(
     Guid Id,
     string Text,
+    DateTime CreatedAtUtc,
+    string CreatedByDisplayName);
+
+public sealed record TicketAttachmentDto(
+    Guid Id,
+    string FileName,
+    string ContentType,
+    long FileSize,
     DateTime CreatedAtUtc,
     string CreatedByDisplayName);
 
