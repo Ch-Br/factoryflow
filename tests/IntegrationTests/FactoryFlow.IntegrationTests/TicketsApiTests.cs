@@ -7,9 +7,11 @@ using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketComment;
 using FactoryFlow.Modules.Tickets.Application.Commands.ChangeTicketStatus;
 using FactoryFlow.Modules.Tickets.Application.Commands.CreateTicket;
 using FactoryFlow.Modules.Tickets.Application.Commands.UpdateTicket;
+using FactoryFlow.Modules.Tickets.Application.Queries.GetOverdueTickets;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketCreationLookups;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketDetail;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketsList;
+using FactoryFlow.Modules.Tickets.Domain.Entities;
 using FactoryFlow.Modules.Tickets.Infrastructure.Seeds;
 using FactoryFlow.Web.Data;
 using FluentAssertions;
@@ -873,6 +875,55 @@ public class TicketsApiTests : IClassFixture<FactoryFlowWebApplicationFactory>
             .ToListAsync();
 
         audits.Should().Contain(a => a.Payload != null && a.Payload.Contains("NewDueAtUtc"));
+    }
+
+    [Fact]
+    public async Task GetOverdueTickets_Authenticated_Returns200WithOverdueTicket()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+
+        var createResponse = await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
+        {
+            Title = "Overdue-Endpoint-Test",
+            Description = "Ticket fuer Overdue-API-Test.",
+            TicketTypeId = TicketsSeedData.TypeGeneralRequestId,
+            PriorityId = TicketsSeedData.PriorityHighId,
+            DepartmentId = FactoryFlow.Modules.Identity.Infrastructure.Seeds.IdentitySeedData.ProductionDeptId,
+            DueAtUtc = DateTime.UtcNow.AddDays(1)
+        });
+
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var createResult = await createResponse.Content.ReadFromJsonAsync<CreateTicketResponse>();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FactoryFlowDbContext>();
+            var ticket = await db.Set<Ticket>().FindAsync(createResult!.TicketId);
+            typeof(Ticket)
+                .GetProperty(nameof(Ticket.DueAtUtc))!
+                .SetValue(ticket, DateTime.UtcNow.AddHours(-3));
+            await db.SaveChangesAsync();
+        }
+
+        var result = await client.GetFromJsonAsync<OverdueTicketsResultDto>("/api/tickets/overdue");
+
+        result.Should().NotBeNull();
+        result!.TotalCount.Should().BeGreaterThanOrEqualTo(1);
+        result.Items.Should().Contain(i => i.Title == "Overdue-Endpoint-Test");
+
+        var overdueItem = result.Items.First(i => i.Title == "Overdue-Endpoint-Test");
+        overdueItem.OverdueBy.Should().BeGreaterThan(TimeSpan.Zero);
+        overdueItem.PriorityName.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task GetOverdueTickets_Unauthenticated_ReturnsUnauthorized()
+    {
+        var client = _factory.CreateClient(new() { AllowAutoRedirect = false });
+
+        var response = await client.GetAsync("/api/tickets/overdue");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     private async Task<HttpClient> CreateAuthenticatedClientAsync()

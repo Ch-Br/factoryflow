@@ -4,6 +4,7 @@ using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketComment;
 using FactoryFlow.Modules.Tickets.Application.Commands.ChangeTicketStatus;
 using FactoryFlow.Modules.Tickets.Application.Commands.CreateTicket;
 using FactoryFlow.Modules.Tickets.Application.Commands.UpdateTicket;
+using FactoryFlow.Modules.Tickets.Application.Queries.GetOverdueTickets;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketCreationLookups;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketDetail;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketsList;
@@ -28,6 +29,11 @@ public static class TicketsEndpoints
             .WithName("GetTicketsList")
             .Produces<TicketListResultDto>()
             .RequireAuthorization(AuthPolicies.TicketsUse);
+
+        group.MapGet("/overdue", GetOverdueTicketsAsync)
+            .WithName("GetOverdueTickets")
+            .Produces<OverdueTicketsResultDto>()
+            .RequireAuthorization(AuthPolicies.TicketsManage);
 
         group.MapGet("/{id:guid}", GetTicketDetailAsync)
             .WithName("GetTicketDetail")
@@ -114,6 +120,14 @@ public static class TicketsEndpoints
         CancellationToken ct)
     {
         var result = await handler.HandleAsync(query, ct);
+        return Results.Ok(result);
+    }
+
+    private static async Task<IResult> GetOverdueTicketsAsync(
+        GetOverdueTicketsQueryHandler handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(ct);
         return Results.Ok(result);
     }
 

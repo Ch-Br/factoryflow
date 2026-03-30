@@ -9,6 +9,7 @@ using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketComment;
 using FactoryFlow.Modules.Tickets.Application.Commands.ChangeTicketStatus;
 using FactoryFlow.Modules.Tickets.Application.Commands.CreateTicket;
 using FactoryFlow.Modules.Tickets.Application.Commands.UpdateTicket;
+using FactoryFlow.Modules.Tickets.Application.Queries.GetOverdueTickets;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketCreationLookups;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketDetail;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketStatusLookups;
@@ -84,6 +85,7 @@ try
     builder.Services.AddScoped<GetTicketsListQueryHandler>();
     builder.Services.AddScoped<GetTicketStatusLookupsQueryHandler>();
     builder.Services.AddScoped<GetTicketDetailQueryHandler>();
+    builder.Services.AddScoped<GetOverdueTicketsQueryHandler>();
 
     // --- File storage ---
     builder.Services.AddSingleton<IFileStorage, LocalDiskFileStorage>();
