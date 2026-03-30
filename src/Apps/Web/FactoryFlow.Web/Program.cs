@@ -1,5 +1,6 @@
 using FactoryFlow.Modules.Audit.Application;
 using FactoryFlow.Modules.Audit.Infrastructure.Services;
+using FactoryFlow.Modules.Identity;
 using FactoryFlow.Modules.Identity.Domain.Entities;
 using FactoryFlow.Modules.Identity.Infrastructure.Seeds;
 using FactoryFlow.Modules.Identity.Services;
@@ -19,6 +20,7 @@ using FactoryFlow.SharedKernel.Infrastructure;
 using FactoryFlow.Web.Infrastructure;
 using FactoryFlow.Web.Components;
 using FactoryFlow.Web.Data;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -53,6 +55,14 @@ try
         .AddEntityFrameworkStores<FactoryFlowDbContext>()
         .AddDefaultTokenProviders();
 
+    builder.Services.AddAuthorization(options =>
+    {
+        options.AddPolicy(AuthPolicies.TicketsUse, policy =>
+            policy.RequireRole(AppRoles.User, AppRoles.Supervisor, AppRoles.Admin));
+        options.AddPolicy(AuthPolicies.TicketsManage, policy =>
+            policy.RequireRole(AppRoles.Supervisor, AppRoles.Admin));
+    });
+
     builder.Services.ConfigureApplicationCookie(options =>
     {
         options.LoginPath = "/Account/Login";
@@ -82,6 +92,7 @@ try
     builder.Services.AddScoped<IAuditWriter, AuditWriter>();
 
     // --- Blazor ---
+    builder.Services.AddCascadingAuthenticationState();
     builder.Services.AddRazorComponents()
         .AddInteractiveServerComponents();
 

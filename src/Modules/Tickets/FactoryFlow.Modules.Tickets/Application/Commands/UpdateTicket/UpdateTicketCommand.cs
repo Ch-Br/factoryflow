@@ -14,4 +14,6 @@ public sealed record UpdateTicketCommand
 
     [Required]
     public required Guid PriorityId { get; init; }
+
+    public DateTime? DueAtUtc { get; init; }
 }

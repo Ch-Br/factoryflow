@@ -1,4 +1,5 @@
 using FactoryFlow.Web.Data;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -23,6 +24,16 @@ public class FactoryFlowWebApplicationFactory : WebApplicationFactory<Program>, 
 
             services.AddDbContext<FactoryFlowDbContext>(options =>
                 options.UseNpgsql(_postgres.GetConnectionString()));
+
+            services.AddAuthentication()
+                .AddScheme<AuthenticationSchemeOptions, IntegrationTestAuthHandler>(
+                    IntegrationTestAuthHandler.SchemeName, _ => { });
+
+            services.PostConfigure<AuthenticationOptions>(options =>
+            {
+                options.DefaultAuthenticateScheme = IntegrationTestAuthHandler.SchemeName;
+                options.DefaultChallengeScheme = IntegrationTestAuthHandler.SchemeName;
+            });
         });
     }
 

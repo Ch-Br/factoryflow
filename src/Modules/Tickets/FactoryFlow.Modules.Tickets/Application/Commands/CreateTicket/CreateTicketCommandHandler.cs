@@ -51,6 +51,9 @@ public sealed class CreateTicketCommandHandler
         if (!await _db.Set<TicketStatus>().AnyAsync(s => s.Id == TicketsSeedData.StatusNewId, ct))
             errors.Add("Status 'Neu' ist nicht konfiguriert.");
 
+        if (command.DueAtUtc.HasValue && command.DueAtUtc.Value < DateTime.UtcNow)
+            errors.Add("Fälligkeit darf nicht in der Vergangenheit liegen.");
+
         if (errors.Count > 0)
             return Result.Failure<CreateTicketResponse>(errors.ToArray());
 
@@ -69,7 +72,8 @@ public sealed class CreateTicketCommandHandler
                 siteId: command.SiteId,
                 machineOrWorkstation: command.MachineOrWorkstation,
                 statusNewId: TicketsSeedData.StatusNewId,
-                createdByUserId: _currentUser.UserId);
+                createdByUserId: _currentUser.UserId,
+                dueAtUtc: command.DueAtUtc);
 
             ticket.TicketNumber = ticketNumber;
 
@@ -82,7 +86,8 @@ public sealed class CreateTicketCommandHandler
                 ticket.Title,
                 TicketTypeId = command.TicketTypeId,
                 PriorityId = command.PriorityId,
-                DepartmentId = command.DepartmentId
+                DepartmentId = command.DepartmentId,
+                DueAtUtc = command.DueAtUtc?.ToString("o")
             });
 
             await _auditWriter.RecordAsync(

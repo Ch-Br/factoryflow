@@ -24,6 +24,8 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
 
         builder.Property(t => t.MachineOrWorkstation).HasMaxLength(200);
 
+        builder.Property(t => t.DueAtUtc).IsRequired(false);
+
         builder.HasOne(t => t.TicketType)
             .WithMany()
             .HasForeignKey(t => t.TicketTypeId)

@@ -53,6 +53,7 @@ public sealed class GetTicketDetailQueryHandler
                 SiteName = s != null ? s.Name : null,
                 t.MachineOrWorkstation,
                 t.CreatedAtUtc,
+                t.DueAtUtc,
                 CreatedByDisplayName = u != null ? (u.FirstName + " " + u.LastName).Trim() : t.CreatedByUserId
             }
         ).FirstOrDefaultAsync(ct);
@@ -104,6 +105,7 @@ public sealed class GetTicketDetailQueryHandler
             detail.SiteName,
             detail.MachineOrWorkstation,
             detail.CreatedAtUtc,
+            detail.DueAtUtc,
             detail.CreatedByDisplayName,
             comments,
             attachments,
@@ -222,6 +224,8 @@ public sealed class GetTicketDetailQueryHandler
                 parts.Add("Beschreibung");
             if (doc.RootElement.TryGetProperty("NewPriorityId", out _))
                 parts.Add("Priorität");
+            if (doc.RootElement.TryGetProperty("NewDueAtUtc", out _))
+                parts.Add("Fälligkeit");
 
             return parts.Count > 0
                 ? $"Geändert: {string.Join(", ", parts)}"

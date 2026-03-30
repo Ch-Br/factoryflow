@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using FactoryFlow.Modules.Identity;
 using FactoryFlow.Modules.Identity.Domain.Entities;
 using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketAttachment;
 using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketComment;
@@ -41,7 +42,7 @@ public class TicketsApiTests : IClassFixture<FactoryFlowWebApplicationFactory>
             DepartmentId = Guid.NewGuid()
         });
 
-        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
@@ -83,13 +84,13 @@ public class TicketsApiTests : IClassFixture<FactoryFlowWebApplicationFactory>
     }
 
     [Fact]
-    public async Task GetTicketsList_Unauthenticated_ReturnsRedirect()
+    public async Task GetTicketsList_Unauthenticated_Returns401()
     {
         var client = _factory.CreateClient(new() { AllowAutoRedirect = false });
 
         var response = await client.GetAsync("/api/tickets");
 
-        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
@@ -124,7 +125,7 @@ public class TicketsApiTests : IClassFixture<FactoryFlowWebApplicationFactory>
     [Fact]
     public async Task GetTicketDetail_NonExistentId_Returns404()
     {
-        var client = _factory.CreateClient(new() { AllowAutoRedirect = false });
+        var client = await CreateAuthenticatedClientAsync();
 
         var response = await client.GetAsync($"/api/tickets/{Guid.NewGuid()}");
 
@@ -673,6 +674,207 @@ public class TicketsApiTests : IClassFixture<FactoryFlowWebApplicationFactory>
         audit!.Payload.Should().Contain("audit-test.pdf");
     }
 
+    [Fact]
+    public async Task GetTicketsList_OnlyOpen_ExcludesClosedTickets()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+
+        var createOpen = await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
+        {
+            Title = "Filter-Open-Test",
+            Description = "Offenes Ticket.",
+            TicketTypeId = TicketsSeedData.TypeGeneralRequestId,
+            PriorityId = TicketsSeedData.PriorityMediumId,
+            DepartmentId = FactoryFlow.Modules.Identity.Infrastructure.Seeds.IdentitySeedData.ProductionDeptId
+        });
+        var openResult = await createOpen.Content.ReadFromJsonAsync<CreateTicketResponse>();
+
+        var createClosed = await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
+        {
+            Title = "Filter-Closed-Test",
+            Description = "Wird geschlossen.",
+            TicketTypeId = TicketsSeedData.TypeGeneralRequestId,
+            PriorityId = TicketsSeedData.PriorityMediumId,
+            DepartmentId = FactoryFlow.Modules.Identity.Infrastructure.Seeds.IdentitySeedData.ProductionDeptId
+        });
+        var closedResult = await createClosed.Content.ReadFromJsonAsync<CreateTicketResponse>();
+
+        await client.PatchAsJsonAsync(
+            $"/api/tickets/{closedResult!.TicketId}/status",
+            new ChangeTicketStatusCommand { NewStatusId = TicketsSeedData.StatusClosedId });
+
+        var result = await client.GetFromJsonAsync<TicketListResultDto>("/api/tickets?OnlyOpen=true");
+
+        result.Should().NotBeNull();
+        result!.Items.Should().NotContain(i => i.Title == "Filter-Closed-Test");
+        result.Items.Should().Contain(i => i.Title == "Filter-Open-Test");
+    }
+
+    [Fact]
+    public async Task GetTicketsList_FilterByStatusId_ReturnsOnlyMatchingStatus()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+
+        var createResponse = await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
+        {
+            Title = "Filter-Status-Test",
+            Description = "Wird auf InProgress gesetzt.",
+            TicketTypeId = TicketsSeedData.TypeGeneralRequestId,
+            PriorityId = TicketsSeedData.PriorityMediumId,
+            DepartmentId = FactoryFlow.Modules.Identity.Infrastructure.Seeds.IdentitySeedData.ProductionDeptId
+        });
+        var createResult = await createResponse.Content.ReadFromJsonAsync<CreateTicketResponse>();
+
+        await client.PatchAsJsonAsync(
+            $"/api/tickets/{createResult!.TicketId}/status",
+            new ChangeTicketStatusCommand { NewStatusId = TicketsSeedData.StatusInProgressId });
+
+        var result = await client.GetFromJsonAsync<TicketListResultDto>(
+            $"/api/tickets?StatusId={TicketsSeedData.StatusInProgressId}");
+
+        result.Should().NotBeNull();
+        result!.Items.Should().Contain(i => i.Title == "Filter-Status-Test");
+        result.Items.Should().OnlyContain(i => i.StatusName == "In Bearbeitung");
+    }
+
+    [Fact]
+    public async Task GetTicketsList_FilterByPriorityId_ReturnsOnlyMatchingPriority()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+
+        await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
+        {
+            Title = "Filter-Priority-Low",
+            Description = "Niedrige Priorität.",
+            TicketTypeId = TicketsSeedData.TypeGeneralRequestId,
+            PriorityId = TicketsSeedData.PriorityLowId,
+            DepartmentId = FactoryFlow.Modules.Identity.Infrastructure.Seeds.IdentitySeedData.ProductionDeptId
+        });
+
+        var result = await client.GetFromJsonAsync<TicketListResultDto>(
+            $"/api/tickets?PriorityId={TicketsSeedData.PriorityLowId}");
+
+        result.Should().NotBeNull();
+        result!.Items.Should().Contain(i => i.Title == "Filter-Priority-Low");
+        result.Items.Should().OnlyContain(i => i.PriorityName == "Niedrig");
+    }
+
+    [Fact]
+    public async Task GetTicketsList_CombinedFilters_ReturnsIntersection()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+
+        var createResponse = await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
+        {
+            Title = "Filter-Combined-Match",
+            Description = "InProgress + High.",
+            TicketTypeId = TicketsSeedData.TypeGeneralRequestId,
+            PriorityId = TicketsSeedData.PriorityHighId,
+            DepartmentId = FactoryFlow.Modules.Identity.Infrastructure.Seeds.IdentitySeedData.ProductionDeptId
+        });
+        var createResult = await createResponse.Content.ReadFromJsonAsync<CreateTicketResponse>();
+
+        await client.PatchAsJsonAsync(
+            $"/api/tickets/{createResult!.TicketId}/status",
+            new ChangeTicketStatusCommand { NewStatusId = TicketsSeedData.StatusInProgressId });
+
+        var result = await client.GetFromJsonAsync<TicketListResultDto>(
+            $"/api/tickets?StatusId={TicketsSeedData.StatusInProgressId}&PriorityId={TicketsSeedData.PriorityHighId}&OnlyOpen=true");
+
+        result.Should().NotBeNull();
+        result!.Items.Should().Contain(i => i.Title == "Filter-Combined-Match");
+        result.Items.Should().OnlyContain(i =>
+            i.StatusName == "In Bearbeitung" && i.PriorityName == "Hoch");
+    }
+
+    [Fact]
+    public async Task CreateTicket_WithDueAtUtc_PersistsInDetailAndList()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+        var due = DateTime.UtcNow.AddDays(3);
+
+        var createResponse = await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
+        {
+            Title = "Due-Test",
+            Description = "Mit Fälligkeit.",
+            TicketTypeId = TicketsSeedData.TypeGeneralRequestId,
+            PriorityId = TicketsSeedData.PriorityMediumId,
+            DepartmentId = FactoryFlow.Modules.Identity.Infrastructure.Seeds.IdentitySeedData.ProductionDeptId,
+            DueAtUtc = due
+        });
+
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var createResult = await createResponse.Content.ReadFromJsonAsync<CreateTicketResponse>();
+
+        var detailResponse = await client.GetAsync($"/api/tickets/{createResult!.TicketId}");
+        detailResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var detail = await detailResponse.Content.ReadFromJsonAsync<TicketDetailDto>();
+        detail.Should().NotBeNull();
+        detail!.DueAtUtc.Should().NotBeNull();
+        detail.DueAtUtc!.Value.Should().BeCloseTo(due, TimeSpan.FromSeconds(2));
+
+        var list = await client.GetFromJsonAsync<TicketListResultDto>("/api/tickets");
+        var item = list!.Items.First(i => i.Id == createResult.TicketId);
+        item.DueAtUtc.Should().NotBeNull();
+        item.DueAtUtc!.Value.Should().BeCloseTo(due, TimeSpan.FromSeconds(2));
+    }
+
+    [Fact]
+    public async Task CreateTicket_WithDueBeforeNow_ReturnsValidationError()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+
+        var createResponse = await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
+        {
+            Title = "Ungültige Fälligkeit",
+            Description = "Due in der Vergangenheit.",
+            TicketTypeId = TicketsSeedData.TypeGeneralRequestId,
+            PriorityId = TicketsSeedData.PriorityMediumId,
+            DepartmentId = FactoryFlow.Modules.Identity.Infrastructure.Seeds.IdentitySeedData.ProductionDeptId,
+            DueAtUtc = DateTime.UtcNow.AddDays(-2)
+        });
+
+        createResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task UpdateTicket_ChangeDueAtUtc_WritesAuditPayload()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+
+        var due1 = DateTime.UtcNow.AddDays(2);
+        var createResponse = await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
+        {
+            Title = "Due-Update-Audit",
+            Description = "Audit Fälligkeit.",
+            TicketTypeId = TicketsSeedData.TypeGeneralRequestId,
+            PriorityId = TicketsSeedData.PriorityLowId,
+            DepartmentId = FactoryFlow.Modules.Identity.Infrastructure.Seeds.IdentitySeedData.ProductionDeptId,
+            DueAtUtc = due1
+        });
+
+        var createResult = await createResponse.Content.ReadFromJsonAsync<CreateTicketResponse>();
+        var due2 = DateTime.UtcNow.AddDays(5);
+
+        await client.PutAsJsonAsync(
+            $"/api/tickets/{createResult!.TicketId}",
+            new UpdateTicketCommand
+            {
+                Title = "Due-Update-Audit",
+                Description = "Audit Fälligkeit.",
+                PriorityId = TicketsSeedData.PriorityLowId,
+                DueAtUtc = due2
+            });
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FactoryFlowDbContext>();
+        var audits = await db.AuditEntries
+            .Where(a => a.EntityId == createResult.TicketId.ToString() && a.EventType == "TicketUpdated")
+            .ToListAsync();
+
+        audits.Should().Contain(a => a.Payload != null && a.Payload.Contains("NewDueAtUtc"));
+    }
+
     private async Task<HttpClient> CreateAuthenticatedClientAsync()
     {
         using var scope = _factory.Services.CreateScope();
@@ -693,27 +895,11 @@ public class TicketsApiTests : IClassFixture<FactoryFlowWebApplicationFactory>
             await userManager.CreateAsync(user, "Test123!");
         }
 
-        var client = _factory.CreateClient(new()
-        {
-            AllowAutoRedirect = false
-        });
+        if (!await userManager.IsInRoleAsync(user, AppRoles.Supervisor))
+            await userManager.AddToRoleAsync(user, AppRoles.Supervisor);
 
-        // Sign in via cookie
-        var loginResponse = await client.PostAsync("/Account/Login", new FormUrlEncodedContent(
-            new Dictionary<string, string>
-            {
-                ["_model.Email"] = email,
-                ["_model.Password"] = "Test123!"
-            }));
-
-        if (loginResponse.Headers.TryGetValues("Set-Cookie", out var cookies))
-        {
-            foreach (var cookie in cookies)
-            {
-                client.DefaultRequestHeaders.Add("Cookie", cookie.Split(';')[0]);
-            }
-        }
-
+        var client = _factory.CreateClient(new() { AllowAutoRedirect = false });
+        client.DefaultRequestHeaders.Add(IntegrationTestAuthHandler.HeaderName, "1");
         return client;
     }
 }

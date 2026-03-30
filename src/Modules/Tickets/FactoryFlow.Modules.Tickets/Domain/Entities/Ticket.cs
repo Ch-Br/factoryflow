@@ -15,7 +15,8 @@ public class Ticket : AuditableEntity<Guid>
         Guid? siteId,
         string? machineOrWorkstation,
         Guid statusNewId,
-        string createdByUserId)
+        string createdByUserId,
+        DateTime? dueAtUtc = null)
     {
         if (string.IsNullOrWhiteSpace(title))
             throw new ArgumentException("Titel darf nicht leer sein.", nameof(title));
@@ -25,6 +26,9 @@ public class Ticket : AuditableEntity<Guid>
 
         if (string.IsNullOrWhiteSpace(createdByUserId))
             throw new ArgumentException("Ersteller muss gesetzt sein.", nameof(createdByUserId));
+
+        if (dueAtUtc.HasValue && dueAtUtc.Value < DateTime.UtcNow)
+            throw new ArgumentException("Fälligkeit darf nicht in der Vergangenheit liegen.", nameof(dueAtUtc));
 
         return new Ticket
         {
@@ -38,7 +42,8 @@ public class Ticket : AuditableEntity<Guid>
             MachineOrWorkstation = machineOrWorkstation?.Trim(),
             StatusId = statusNewId,
             CreatedByUserId = createdByUserId,
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = DateTime.UtcNow,
+            DueAtUtc = dueAtUtc
         };
     }
 
@@ -55,10 +60,12 @@ public class Ticket : AuditableEntity<Guid>
     public Guid StatusId { get; private set; }
     public TicketStatus? Status { get; private set; }
 
+    public DateTime? DueAtUtc { get; private set; }
+
     /// <summary>
     /// Updates editable fields. Returns <c>true</c> if any value changed, <c>false</c> if all values were identical.
     /// </summary>
-    public bool Update(string title, string description, Guid priorityId)
+    public bool Update(string title, string description, Guid priorityId, DateTime? dueAtUtc)
     {
         if (string.IsNullOrWhiteSpace(title))
             throw new ArgumentException("Titel darf nicht leer sein.", nameof(title));
@@ -66,15 +73,19 @@ public class Ticket : AuditableEntity<Guid>
         if (string.IsNullOrWhiteSpace(description))
             throw new ArgumentException("Beschreibung darf nicht leer sein.", nameof(description));
 
+        if (dueAtUtc.HasValue && dueAtUtc.Value < CreatedAtUtc)
+            throw new ArgumentException("Fälligkeit darf nicht vor dem Erstelldatum liegen.", nameof(dueAtUtc));
+
         var trimmedTitle = title.Trim();
         var trimmedDescription = description.Trim();
 
-        if (trimmedTitle == Title && trimmedDescription == Description && priorityId == PriorityId)
+        if (trimmedTitle == Title && trimmedDescription == Description && priorityId == PriorityId && dueAtUtc == DueAtUtc)
             return false;
 
         Title = trimmedTitle;
         Description = trimmedDescription;
         PriorityId = priorityId;
+        DueAtUtc = dueAtUtc;
         return true;
     }
 

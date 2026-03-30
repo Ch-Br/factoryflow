@@ -2,6 +2,7 @@ using FactoryFlow.Modules.Identity.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace FactoryFlow.Modules.Identity.Infrastructure.Seeds;
 
@@ -37,22 +38,70 @@ public static class IdentitySeedData
 
     public static async Task SeedUsersAsync(IServiceProvider services)
     {
+        var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+        var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(IdentitySeedData));
 
-        if (await userManager.FindByNameAsync("admin@factoryflow.local") is not null)
-            return;
-
-        var admin = new ApplicationUser
+        string[] roles = [AppRoles.User, AppRoles.Supervisor, AppRoles.Admin];
+        foreach (var role in roles)
         {
-            UserName = "admin@factoryflow.local",
-            Email = "admin@factoryflow.local",
-            EmailConfirmed = true,
-            FirstName = "System",
-            LastName = "Administrator",
-            DepartmentId = MaintenanceDeptId,
-            SiteId = MainSiteId
-        };
+            if (!await roleManager.RoleExistsAsync(role))
+            {
+                await roleManager.CreateAsync(new IdentityRole(role));
+                logger.LogInformation("Seeded role {Role}", role);
+            }
+        }
 
-        await userManager.CreateAsync(admin, "Admin123!");
+        await EnsureUserAsync(userManager, logger,
+            email: "admin@factoryflow.local",
+            firstName: "System", lastName: "Administrator",
+            password: "Admin123!",
+            role: AppRoles.Admin,
+            departmentId: MaintenanceDeptId, siteId: MainSiteId);
+
+        await EnsureUserAsync(userManager, logger,
+            email: "supervisor@factoryflow.local",
+            firstName: "Demo", lastName: "Supervisor",
+            password: "Demo123!",
+            role: AppRoles.Supervisor,
+            departmentId: ProductionDeptId, siteId: MainSiteId);
+
+        await EnsureUserAsync(userManager, logger,
+            email: "user@factoryflow.local",
+            firstName: "Demo", lastName: "User",
+            password: "Demo123!",
+            role: AppRoles.User,
+            departmentId: ProductionDeptId, siteId: MainSiteId);
+    }
+
+    private static async Task EnsureUserAsync(
+        UserManager<ApplicationUser> userManager,
+        ILogger logger,
+        string email, string firstName, string lastName,
+        string password, string role,
+        Guid departmentId, Guid siteId)
+    {
+        var user = await userManager.FindByNameAsync(email);
+        if (user is null)
+        {
+            user = new ApplicationUser
+            {
+                UserName = email,
+                Email = email,
+                EmailConfirmed = true,
+                FirstName = firstName,
+                LastName = lastName,
+                DepartmentId = departmentId,
+                SiteId = siteId
+            };
+            await userManager.CreateAsync(user, password);
+            logger.LogInformation("Seeded user {Email}", email);
+        }
+
+        if (!await userManager.IsInRoleAsync(user, role))
+        {
+            await userManager.AddToRoleAsync(user, role);
+            logger.LogInformation("Assigned role {Role} to {Email}", role, email);
+        }
     }
 }

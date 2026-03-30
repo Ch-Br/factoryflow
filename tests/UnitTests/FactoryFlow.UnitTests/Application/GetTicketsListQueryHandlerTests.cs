@@ -10,6 +10,7 @@ namespace FactoryFlow.UnitTests.Application;
 public class GetTicketsListQueryHandlerTests : IDisposable
 {
     private readonly FactoryFlowDbContext _db;
+    private int _ticketCounter;
 
     public GetTicketsListQueryHandlerTests()
     {
@@ -70,6 +71,107 @@ public class GetTicketsListQueryHandlerTests : IDisposable
         item.PriorityName.Should().Be("Kritisch");
         item.StatusName.Should().Be("Neu");
         item.CreatedAtUtc.Should().Be(new DateTime(2026, 2, 1, 12, 0, 0, DateTimeKind.Utc));
+        item.DueAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HandleAsync_NoFilters_ReturnsAllTickets()
+    {
+        SeedAllLookups();
+        _db.Set<Ticket>().AddRange(
+            CreateTicket("T1", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+            CreateTicket("T2", new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+                statusId: TicketsSeedData.StatusClosedId, priorityId: TicketsSeedData.PriorityHighId),
+            CreateTicket("T3", new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc),
+                statusId: TicketsSeedData.StatusInProgressId));
+        await _db.SaveChangesAsync();
+
+        var handler = new GetTicketsListQueryHandler(_db);
+        var result = await handler.HandleAsync(new GetTicketsListQuery());
+
+        result.Items.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task HandleAsync_FilterByStatusId_ReturnsOnlyMatchingStatus()
+    {
+        SeedAllLookups();
+        _db.Set<Ticket>().AddRange(
+            CreateTicket("Neu1", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+            CreateTicket("InProgress1", new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+                statusId: TicketsSeedData.StatusInProgressId),
+            CreateTicket("Closed1", new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc),
+                statusId: TicketsSeedData.StatusClosedId));
+        await _db.SaveChangesAsync();
+
+        var handler = new GetTicketsListQueryHandler(_db);
+        var result = await handler.HandleAsync(
+            new GetTicketsListQuery(StatusId: TicketsSeedData.StatusInProgressId));
+
+        result.Items.Should().ContainSingle()
+            .Which.Title.Should().Be("InProgress1");
+    }
+
+    [Fact]
+    public async Task HandleAsync_FilterByPriorityId_ReturnsOnlyMatchingPriority()
+    {
+        SeedAllLookups();
+        _db.Set<Ticket>().AddRange(
+            CreateTicket("Kritisch1", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+            CreateTicket("Hoch1", new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+                priorityId: TicketsSeedData.PriorityHighId));
+        await _db.SaveChangesAsync();
+
+        var handler = new GetTicketsListQueryHandler(_db);
+        var result = await handler.HandleAsync(
+            new GetTicketsListQuery(PriorityId: TicketsSeedData.PriorityHighId));
+
+        result.Items.Should().ContainSingle()
+            .Which.Title.Should().Be("Hoch1");
+    }
+
+    [Fact]
+    public async Task HandleAsync_OnlyOpen_ExcludesClosedTickets()
+    {
+        SeedAllLookups();
+        _db.Set<Ticket>().AddRange(
+            CreateTicket("Offen1", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+            CreateTicket("InProgress1", new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+                statusId: TicketsSeedData.StatusInProgressId),
+            CreateTicket("Geschlossen1", new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc),
+                statusId: TicketsSeedData.StatusClosedId));
+        await _db.SaveChangesAsync();
+
+        var handler = new GetTicketsListQueryHandler(_db);
+        var result = await handler.HandleAsync(new GetTicketsListQuery(OnlyOpen: true));
+
+        result.Items.Should().HaveCount(2);
+        result.Items.Should().NotContain(i => i.Title == "Geschlossen1");
+    }
+
+    [Fact]
+    public async Task HandleAsync_CombinedFilters_ReturnsIntersection()
+    {
+        SeedAllLookups();
+        _db.Set<Ticket>().AddRange(
+            CreateTicket("Match", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                statusId: TicketsSeedData.StatusInProgressId, priorityId: TicketsSeedData.PriorityHighId),
+            CreateTicket("WrongStatus", new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+                statusId: TicketsSeedData.StatusNewId, priorityId: TicketsSeedData.PriorityHighId),
+            CreateTicket("WrongPriority", new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc),
+                statusId: TicketsSeedData.StatusInProgressId, priorityId: TicketsSeedData.PriorityCriticalId),
+            CreateTicket("Closed", new DateTime(2026, 1, 4, 0, 0, 0, DateTimeKind.Utc),
+                statusId: TicketsSeedData.StatusClosedId, priorityId: TicketsSeedData.PriorityHighId));
+        await _db.SaveChangesAsync();
+
+        var handler = new GetTicketsListQueryHandler(_db);
+        var result = await handler.HandleAsync(new GetTicketsListQuery(
+            StatusId: TicketsSeedData.StatusInProgressId,
+            PriorityId: TicketsSeedData.PriorityHighId,
+            OnlyOpen: true));
+
+        result.Items.Should().ContainSingle()
+            .Which.Title.Should().Be("Match");
     }
 
     private void SeedLookups()
@@ -86,22 +188,47 @@ public class GetTicketsListQueryHandlerTests : IDisposable
         }
     }
 
-    private static Ticket CreateTicket(string title, DateTime createdAtUtc)
+    private void SeedAllLookups()
     {
+        if (!_db.Set<TicketType>().Any())
+        {
+            _db.Set<TicketType>().Add(new TicketType(
+                TicketsSeedData.TypeMachineFailureId, "Maschinenstörung", "machine_failure"));
+
+            _db.Set<TicketPriority>().AddRange(
+                new TicketPriority(TicketsSeedData.PriorityCriticalId, "Kritisch", "critical", 1),
+                new TicketPriority(TicketsSeedData.PriorityHighId, "Hoch", "high", 2));
+
+            _db.Set<TicketStatus>().AddRange(
+                new TicketStatus(TicketsSeedData.StatusNewId, "Neu", "new", 1),
+                new TicketStatus(TicketsSeedData.StatusInProgressId, "In Bearbeitung", "in_progress", 2),
+                new TicketStatus(TicketsSeedData.StatusClosedId, "Geschlossen", "closed", 3));
+
+            _db.SaveChanges();
+        }
+    }
+
+    private Ticket CreateTicket(
+        string title,
+        DateTime createdAtUtc,
+        Guid? statusId = null,
+        Guid? priorityId = null)
+    {
+        _ticketCounter++;
         var ticket = Ticket.Create(
             title: title,
             description: "Testbeschreibung",
             ticketTypeId: TicketsSeedData.TypeMachineFailureId,
-            priorityId: TicketsSeedData.PriorityCriticalId,
+            priorityId: priorityId ?? TicketsSeedData.PriorityCriticalId,
             departmentId: Guid.NewGuid(),
             siteId: null,
             machineOrWorkstation: null,
-            statusNewId: TicketsSeedData.StatusNewId,
+            statusNewId: statusId ?? TicketsSeedData.StatusNewId,
             createdByUserId: "test-user");
 
         typeof(Ticket)
             .GetProperty(nameof(Ticket.TicketNumber))!
-            .SetValue(ticket, "FF-TEST-001");
+            .SetValue(ticket, $"FF-TEST-{_ticketCounter:D3}");
 
         typeof(Ticket).BaseType!
             .GetProperty(nameof(Ticket.CreatedAtUtc))!

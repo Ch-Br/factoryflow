@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FactoryFlow.Modules.Audit.Application;
+using FactoryFlow.Modules.Identity;
 using FactoryFlow.Modules.Tickets.Domain.Entities;
 using FactoryFlow.SharedKernel.Application;
 using FactoryFlow.SharedKernel.Domain;
@@ -35,6 +36,9 @@ public sealed class UpdateTicketCommandHandler
         if (!_currentUser.IsAuthenticated)
             return Result.Failure("Benutzer ist nicht authentifiziert.");
 
+        if (!_currentUser.IsInRole(AppRoles.Supervisor) && !_currentUser.IsInRole(AppRoles.Admin))
+            return Result.Failure("Keine Berechtigung für diese Aktion.");
+
         var ticket = await _db.Set<Ticket>()
             .FirstOrDefaultAsync(t => t.Id == ticketId, ct);
 
@@ -47,8 +51,21 @@ public sealed class UpdateTicketCommandHandler
         var previousTitle = ticket.Title;
         var previousDescription = ticket.Description;
         var previousPriorityId = ticket.PriorityId;
+        var previousDueAtUtc = ticket.DueAtUtc;
 
-        var changed = ticket.Update(command.Title, command.Description, command.PriorityId);
+        bool changed;
+        try
+        {
+            changed = ticket.Update(
+                command.Title,
+                command.Description,
+                command.PriorityId,
+                command.DueAtUtc);
+        }
+        catch (ArgumentException ex)
+        {
+            return Result.Failure(ex.Message);
+        }
 
         if (!changed)
             return Result.Success();
@@ -74,6 +91,16 @@ public sealed class UpdateTicketCommandHandler
             {
                 payload["PreviousPriorityId"] = previousPriorityId.ToString();
                 payload["NewPriorityId"] = ticket.PriorityId.ToString();
+            }
+
+            if (previousDueAtUtc != ticket.DueAtUtc)
+            {
+                payload["PreviousDueAtUtc"] = previousDueAtUtc.HasValue
+                    ? previousDueAtUtc.Value.ToString("o")
+                    : "";
+                payload["NewDueAtUtc"] = ticket.DueAtUtc.HasValue
+                    ? ticket.DueAtUtc.Value.ToString("o")
+                    : "";
             }
 
             await _auditWriter.RecordAsync(

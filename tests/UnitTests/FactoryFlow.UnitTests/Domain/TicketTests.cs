@@ -163,7 +163,7 @@ public class TicketTests
         var ticket = CreateValidTicket();
         var newPriorityId = Guid.NewGuid();
 
-        var changed = ticket.Update("Neuer Titel", "Neue Beschreibung", newPriorityId);
+        var changed = ticket.Update("Neuer Titel", "Neue Beschreibung", newPriorityId, null);
 
         changed.Should().BeTrue();
         ticket.Title.Should().Be("Neuer Titel");
@@ -176,7 +176,7 @@ public class TicketTests
     {
         var ticket = CreateValidTicket();
 
-        var changed = ticket.Update(ticket.Title, ticket.Description, ticket.PriorityId);
+        var changed = ticket.Update(ticket.Title, ticket.Description, ticket.PriorityId, ticket.DueAtUtc);
 
         changed.Should().BeFalse();
     }
@@ -186,7 +186,7 @@ public class TicketTests
     {
         var ticket = CreateValidTicket();
 
-        var changed = ticket.Update("  " + ticket.Title + "  ", "  " + ticket.Description + "  ", ticket.PriorityId);
+        var changed = ticket.Update("  " + ticket.Title + "  ", "  " + ticket.Description + "  ", ticket.PriorityId, ticket.DueAtUtc);
 
         changed.Should().BeFalse();
     }
@@ -196,7 +196,7 @@ public class TicketTests
     {
         var ticket = CreateValidTicket();
 
-        var act = () => ticket.Update("  ", "Neue Beschreibung", Guid.NewGuid());
+        var act = () => ticket.Update("  ", "Neue Beschreibung", Guid.NewGuid(), null);
 
         act.Should().Throw<ArgumentException>().WithParameterName("title");
     }
@@ -206,9 +206,93 @@ public class TicketTests
     {
         var ticket = CreateValidTicket();
 
-        var act = () => ticket.Update("Neuer Titel", "", Guid.NewGuid());
+        var act = () => ticket.Update("Neuer Titel", "", Guid.NewGuid(), null);
 
         act.Should().Throw<ArgumentException>().WithParameterName("description");
+    }
+
+    [Fact]
+    public void Create_WithValidDueAtUtc_SetsProperty()
+    {
+        var due = DateTime.UtcNow.AddDays(7);
+
+        var ticket = Ticket.Create(
+            title: "Titel",
+            description: "Beschreibung",
+            ticketTypeId: Guid.NewGuid(),
+            priorityId: Guid.NewGuid(),
+            departmentId: Guid.NewGuid(),
+            siteId: null,
+            machineOrWorkstation: null,
+            statusNewId: Guid.NewGuid(),
+            createdByUserId: "user-1",
+            dueAtUtc: due);
+
+        ticket.DueAtUtc.Should().Be(due);
+    }
+
+    [Fact]
+    public void Create_WithoutDueAtUtc_LeavesPropertyNull()
+    {
+        var ticket = CreateValidTicket();
+
+        ticket.DueAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public void Create_WithDueAtUtcInPast_ThrowsArgumentException()
+    {
+        var act = () => Ticket.Create(
+            title: "Titel",
+            description: "Beschreibung",
+            ticketTypeId: Guid.NewGuid(),
+            priorityId: Guid.NewGuid(),
+            departmentId: Guid.NewGuid(),
+            siteId: null,
+            machineOrWorkstation: null,
+            statusNewId: Guid.NewGuid(),
+            createdByUserId: "user-1",
+            dueAtUtc: DateTime.UtcNow.AddDays(-1));
+
+        act.Should().Throw<ArgumentException>().WithParameterName("dueAtUtc");
+    }
+
+    [Fact]
+    public void Update_WithValidDueAtUtc_SetsProperty_ReturnsTrue()
+    {
+        var ticket = CreateValidTicket();
+        var due = DateTime.UtcNow.AddDays(5);
+
+        var changed = ticket.Update(ticket.Title, ticket.Description, ticket.PriorityId, due);
+
+        changed.Should().BeTrue();
+        ticket.DueAtUtc.Should().Be(due);
+    }
+
+    [Fact]
+    public void Update_WithDueAtUtcBeforeCreatedAtUtc_ThrowsArgumentException()
+    {
+        var ticket = CreateValidTicket();
+
+        var act = () => ticket.Update(
+            ticket.Title,
+            ticket.Description,
+            ticket.PriorityId,
+            ticket.CreatedAtUtc.AddMinutes(-1));
+
+        act.Should().Throw<ArgumentException>().WithParameterName("dueAtUtc");
+    }
+
+    [Fact]
+    public void Update_OnlyDueAtUtcChanged_ReturnsTrue()
+    {
+        var ticket = CreateValidTicket();
+        var due = DateTime.UtcNow.AddDays(3);
+
+        var changed = ticket.Update(ticket.Title, ticket.Description, ticket.PriorityId, due);
+
+        changed.Should().BeTrue();
+        ticket.DueAtUtc.Should().Be(due);
     }
 
     private static Ticket CreateValidTicket(Guid? statusNewId = null)

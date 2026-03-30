@@ -1,3 +1,4 @@
+using FactoryFlow.Modules.Identity;
 using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketAttachment;
 using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketComment;
 using FactoryFlow.Modules.Tickets.Application.Commands.ChangeTicketStatus;
@@ -21,47 +22,54 @@ public static class TicketsEndpoints
     {
         var group = app.MapGroup("/api/tickets")
             .WithTags("Tickets")
-            .RequireAuthorization();
+            .DisableAntiforgery();
 
         group.MapGet("/", GetTicketsListAsync)
             .WithName("GetTicketsList")
-            .Produces<TicketListResultDto>();
+            .Produces<TicketListResultDto>()
+            .RequireAuthorization(AuthPolicies.TicketsUse);
 
         group.MapGet("/{id:guid}", GetTicketDetailAsync)
             .WithName("GetTicketDetail")
             .Produces<TicketDetailDto>()
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .RequireAuthorization(AuthPolicies.TicketsUse);
 
         group.MapPost("/", CreateTicketAsync)
             .WithName("CreateTicket")
             .Produces<CreateTicketResponse>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
-            .Produces(StatusCodes.Status401Unauthorized);
+            .Produces(StatusCodes.Status401Unauthorized)
+            .RequireAuthorization(AuthPolicies.TicketsUse);
 
         group.MapGet("/creation-lookups", GetCreationLookupsAsync)
             .WithName("GetTicketCreationLookups")
-            .Produces<TicketCreationLookupsDto>();
+            .Produces<TicketCreationLookupsDto>()
+            .RequireAuthorization(AuthPolicies.TicketsUse);
 
         group.MapPut("/{id:guid}", UpdateTicketAsync)
             .WithName("UpdateTicket")
             .Produces(StatusCodes.Status204NoContent)
             .ProducesValidationProblem()
             .Produces(StatusCodes.Status404NotFound)
-            .Produces(StatusCodes.Status401Unauthorized);
+            .Produces(StatusCodes.Status401Unauthorized)
+            .RequireAuthorization(AuthPolicies.TicketsManage);
 
         group.MapPatch("/{id:guid}/status", ChangeTicketStatusAsync)
             .WithName("ChangeTicketStatus")
             .Produces(StatusCodes.Status204NoContent)
             .ProducesValidationProblem()
             .Produces(StatusCodes.Status404NotFound)
-            .Produces(StatusCodes.Status401Unauthorized);
+            .Produces(StatusCodes.Status401Unauthorized)
+            .RequireAuthorization(AuthPolicies.TicketsManage);
 
         group.MapPost("/{id:guid}/comments", AddTicketCommentAsync)
             .WithName("AddTicketComment")
             .Produces<AddTicketCommentResponse>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
             .Produces(StatusCodes.Status404NotFound)
-            .Produces(StatusCodes.Status401Unauthorized);
+            .Produces(StatusCodes.Status401Unauthorized)
+            .RequireAuthorization(AuthPolicies.TicketsUse);
 
         group.MapPost("/{id:guid}/attachments", UploadAttachmentAsync)
             .WithName("UploadAttachment")
@@ -69,12 +77,13 @@ public static class TicketsEndpoints
             .ProducesValidationProblem()
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status401Unauthorized)
-            .DisableAntiforgery();
+            .RequireAuthorization(AuthPolicies.TicketsUse);
 
         group.MapGet("/{id:guid}/attachments/{attachmentId:guid}", DownloadAttachmentAsync)
             .WithName("DownloadAttachment")
             .Produces(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .RequireAuthorization(AuthPolicies.TicketsUse);
     }
 
     private static async Task<IResult> CreateTicketAsync(
@@ -100,10 +109,11 @@ public static class TicketsEndpoints
     }
 
     private static async Task<IResult> GetTicketsListAsync(
+        [AsParameters] GetTicketsListQuery query,
         GetTicketsListQueryHandler handler,
         CancellationToken ct)
     {
-        var result = await handler.HandleAsync(ct);
+        var result = await handler.HandleAsync(query, ct);
         return Results.Ok(result);
     }
 

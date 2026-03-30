@@ -7,7 +7,8 @@ public sealed record TicketListItemDto(
     string TicketTypeName,
     string PriorityName,
     string StatusName,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    DateTime? DueAtUtc);
 
 public sealed record TicketListResultDto(
     IReadOnlyList<TicketListItemDto> Items,

@@ -115,9 +115,17 @@
                         </div>
                     </div>
 
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <label for="machine" class="form-label">Maschine / Arbeitsplatz</label>
                         <InputText id="machine" @bind-Value="_model.MachineOrWorkstation" class="form-control" maxlength="200" placeholder="optional" />
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="dueAt" class="form-label">Fälligkeit</label>
+                        <InputDate TValue="DateTime?" Type="InputDateType.DateTimeLocal"
+                                   id="dueAt" @bind-Value="_model.DueAtLocal" class="form-control"
+                                   style="max-width: 280px;" />
+                        <div class="form-text">Optional; lokale Zeit.</div>
                     </div>
 
                     <button type="submit" class="btn btn-primary btn-lg" disabled="@_submitting">
@@ -173,7 +181,10 @@
                 PriorityId = Guid.Parse(_model.PriorityId),
                 DepartmentId = Guid.Parse(_model.DepartmentId),
                 SiteId = string.IsNullOrEmpty(_model.SiteId) ? null : Guid.Parse(_model.SiteId),
-                MachineOrWorkstation = _model.MachineOrWorkstation
+                MachineOrWorkstation = _model.MachineOrWorkstation,
+                DueAtUtc = _model.DueAtLocal.HasValue
+                    ? _model.DueAtLocal.Value.ToUniversalTime()
+                    : null
             };
 
             var result = await CommandHandler.HandleAsync(command);
@@ -231,5 +242,7 @@
 
         [System.ComponentModel.DataAnnotations.MaxLength(200)]
         public string? MachineOrWorkstation { get; set; }
+
+        public DateTime? DueAtLocal { get; set; }
     }
 }

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FactoryFlow.Modules.Audit.Application;
+using FactoryFlow.Modules.Identity;
 using FactoryFlow.Modules.Tickets.Domain.Entities;
 using FactoryFlow.SharedKernel.Application;
 using FactoryFlow.SharedKernel.Domain;
@@ -34,6 +35,9 @@ public sealed class ChangeTicketStatusCommandHandler
     {
         if (!_currentUser.IsAuthenticated)
             return Result.Failure("Benutzer ist nicht authentifiziert.");
+
+        if (!_currentUser.IsInRole(AppRoles.Supervisor) && !_currentUser.IsInRole(AppRoles.Admin))
+            return Result.Failure("Keine Berechtigung für diese Aktion.");
 
         var ticket = await _db.Set<Ticket>()
             .FirstOrDefaultAsync(t => t.Id == ticketId, ct);

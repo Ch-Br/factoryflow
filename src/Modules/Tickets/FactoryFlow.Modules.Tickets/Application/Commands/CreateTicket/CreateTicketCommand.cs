@@ -23,4 +23,6 @@ public sealed record CreateTicketCommand
 
     [MaxLength(200)]
     public string? MachineOrWorkstation { get; init; }
+
+    public DateTime? DueAtUtc { get; init; }
 }

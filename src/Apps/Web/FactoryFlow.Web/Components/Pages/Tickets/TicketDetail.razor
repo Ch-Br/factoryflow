@@ -6,7 +6,9 @@
 @using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketCreationLookups
 @using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketDetail
 @using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketStatusLookups
+@using FactoryFlow.Modules.Identity
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.Forms
 @attribute [Authorize]
 @rendermode InteractiveServer
@@ -253,6 +255,9 @@
                                 <dd>@_detail.MachineOrWorkstation</dd>
                             }
 
+                            <dt>Fälligkeit</dt>
+                            <dd>@(_detail.DueAtUtc.HasValue ? _detail.DueAtUtc.Value.ToString("dd.MM.yyyy HH:mm") : "—")</dd>
+
                             <dt>Erstellt am</dt>
                             <dd>@_detail.CreatedAtUtc.ToString("dd.MM.yyyy HH:mm")</dd>
 
@@ -262,6 +267,7 @@
                     </div>
                 </div>
 
+                <AuthorizeView Roles="@AppRoles.SupervisorOrAdmin">
                 <div class="card mt-3">
                     <div class="card-body">
                         <h6 class="card-subtitle mb-3 text-muted">Status ändern</h6>
@@ -373,6 +379,18 @@
                             }
                         </div>
 
+                        <div class="mb-3">
+                            <label class="form-label">Fälligkeit</label>
+                            <div class="d-flex flex-wrap gap-2 align-items-center">
+                                <InputDate TValue="DateTime?" Type="InputDateType.DateTimeLocal"
+                                           @bind-Value="_editDueAtLocal" class="form-control" disabled="@_submittingEdit"
+                                           style="max-width: 280px;" />
+                                <button type="button" class="btn btn-outline-secondary btn-sm"
+                                        disabled="@_submittingEdit" @onclick="ClearEditDueAt">Entfernen</button>
+                            </div>
+                            <div class="form-text">Optional; lokale Zeit.</div>
+                        </div>
+
                         <button class="btn btn-primary w-100"
                                 disabled="@(_submittingEdit || string.IsNullOrWhiteSpace(_editTitle) || string.IsNullOrWhiteSpace(_editDescription))"
                                 @onclick="HandleUpdateTicket">
@@ -384,6 +402,7 @@
                         </button>
                     </div>
                 </div>
+                </AuthorizeView>
             </div>
         </div>
     }
@@ -417,6 +436,7 @@
     private string _editTitle = string.Empty;
     private string _editDescription = string.Empty;
     private Guid _editPriorityId;
+    private DateTime? _editDueAtLocal;
     private IReadOnlyList<LookupItemDto>? _priorityOptions;
     private bool _submittingEdit;
     private List<string> _editErrors = [];
@@ -437,6 +457,9 @@
                 _editTitle = _detail.Title;
                 _editDescription = _detail.Description;
                 _editPriorityId = _detail.PriorityId;
+                _editDueAtLocal = _detail.DueAtUtc.HasValue
+                    ? DateTime.SpecifyKind(_detail.DueAtUtc.Value, DateTimeKind.Utc).ToLocalTime()
+                    : null;
                 var lookups = await CreationLookupsHandler.HandleAsync();
                 _priorityOptions = lookups.Priorities;
             }
@@ -532,7 +555,10 @@
             {
                 Title = _editTitle,
                 Description = _editDescription,
-                PriorityId = _editPriorityId
+                PriorityId = _editPriorityId,
+                DueAtUtc = _editDueAtLocal.HasValue
+                    ? _editDueAtLocal.Value.ToUniversalTime()
+                    : null
             };
             var result = await UpdateHandler.HandleAsync(Id, command);
 
@@ -547,6 +573,9 @@
                     _editTitle = _detail.Title;
                     _editDescription = _detail.Description;
                     _editPriorityId = _detail.PriorityId;
+                    _editDueAtLocal = _detail.DueAtUtc.HasValue
+                        ? DateTime.SpecifyKind(_detail.DueAtUtc.Value, DateTimeKind.Utc).ToLocalTime()
+                        : null;
                 }
             }
             else
@@ -563,6 +592,8 @@
             _submittingEdit = false;
         }
     }
+
+    private void ClearEditDueAt() => _editDueAtLocal = null;
 
     private void HandleFileSelected(InputFileChangeEventArgs e)
     {
