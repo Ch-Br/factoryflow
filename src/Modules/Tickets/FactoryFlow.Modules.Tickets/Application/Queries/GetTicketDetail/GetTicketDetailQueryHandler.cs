@@ -2,6 +2,8 @@ using System.Text.Json;
 using FactoryFlow.Modules.Audit.Domain.Entities;
 using FactoryFlow.Modules.Identity.Domain.Entities;
 using FactoryFlow.Modules.Tickets.Domain.Entities;
+using FactoryFlow.Modules.Tickets.Domain.Services;
+using FactoryFlow.Modules.Tickets.Infrastructure.Seeds;
 using Microsoft.EntityFrameworkCore;
 
 namespace FactoryFlow.Modules.Tickets.Application.Queries.GetTicketDetail;
@@ -91,6 +93,11 @@ public sealed class GetTicketDetailQueryHandler
 
         var history = await BuildHistoryAsync(ticketId, ct);
 
+        var dueState = DueStateCalculator.Calculate(
+            detail.DueAtUtc,
+            detail.StatusId == TicketsSeedData.StatusClosedId,
+            DateTime.UtcNow).ToString();
+
         return new TicketDetailDto(
             detail.Id,
             detail.TicketNumber,
@@ -106,6 +113,7 @@ public sealed class GetTicketDetailQueryHandler
             detail.MachineOrWorkstation,
             detail.CreatedAtUtc,
             detail.DueAtUtc,
+            dueState,
             detail.CreatedByDisplayName,
             comments,
             attachments,

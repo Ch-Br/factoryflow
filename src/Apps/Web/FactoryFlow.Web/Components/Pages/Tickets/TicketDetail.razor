@@ -256,7 +256,28 @@
                             }
 
                             <dt>Fälligkeit</dt>
-                            <dd>@(_detail.DueAtUtc.HasValue ? _detail.DueAtUtc.Value.ToString("dd.MM.yyyy HH:mm") : "—")</dd>
+                            <dd>
+                                @if (_detail.DueAtUtc.HasValue)
+                                {
+                                    <span>@_detail.DueAtUtc.Value.ToString("dd.MM.yyyy HH:mm")</span>
+                                    @switch (_detail.DueState)
+                                    {
+                                        case "Overdue":
+                                            <span class="badge bg-danger ms-1">Überfällig</span>
+                                            break;
+                                        case "DueSoon":
+                                            <span class="badge bg-warning text-dark ms-1">Bald fällig</span>
+                                            break;
+                                        case "OnTrack":
+                                            <span class="badge bg-success ms-1">Im Plan</span>
+                                            break;
+                                    }
+                                }
+                                else
+                                {
+                                    <span>—</span>
+                                }
+                            </dd>
 
                             <dt>Erstellt am</dt>
                             <dd>@_detail.CreatedAtUtc.ToString("dd.MM.yyyy HH:mm")</dd>

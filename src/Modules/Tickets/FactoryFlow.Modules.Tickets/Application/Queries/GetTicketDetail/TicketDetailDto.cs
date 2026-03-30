@@ -15,6 +15,7 @@ public sealed record TicketDetailDto(
     string? MachineOrWorkstation,
     DateTime CreatedAtUtc,
     DateTime? DueAtUtc,
+    string DueState,
     string CreatedByDisplayName,
     IReadOnlyList<TicketCommentDto> Comments,
     IReadOnlyList<TicketAttachmentDto> Attachments,

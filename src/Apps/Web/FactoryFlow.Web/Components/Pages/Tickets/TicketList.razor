@@ -96,7 +96,28 @@
                             <td>@ticket.TicketTypeName</td>
                             <td>@ticket.PriorityName</td>
                             <td>@ticket.StatusName</td>
-                            <td class="text-nowrap">@(ticket.DueAtUtc.HasValue ? ticket.DueAtUtc.Value.ToString("dd.MM.yyyy HH:mm") : "—")</td>
+                            <td class="text-nowrap">
+                                @if (ticket.DueAtUtc.HasValue)
+                                {
+                                    <span>@ticket.DueAtUtc.Value.ToString("dd.MM.yyyy HH:mm")</span>
+                                    @switch (ticket.DueState)
+                                    {
+                                        case "Overdue":
+                                            <span class="badge bg-danger ms-1">Überfällig</span>
+                                            break;
+                                        case "DueSoon":
+                                            <span class="badge bg-warning text-dark ms-1">Bald fällig</span>
+                                            break;
+                                        case "OnTrack":
+                                            <span class="badge bg-success ms-1">Im Plan</span>
+                                            break;
+                                    }
+                                }
+                                else
+                                {
+                                    <span>—</span>
+                                }
+                            </td>
                             <td class="text-nowrap">@ticket.CreatedAtUtc.ToString("dd.MM.yyyy HH:mm")</td>
                         </tr>
                     }

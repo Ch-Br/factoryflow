@@ -1,4 +1,5 @@
 using FactoryFlow.Modules.Tickets.Domain.Entities;
+using FactoryFlow.Modules.Tickets.Domain.Services;
 using FactoryFlow.Modules.Tickets.Infrastructure.Seeds;
 using Microsoft.EntityFrameworkCore;
 
@@ -29,18 +30,38 @@ public sealed class GetTicketsListQueryHandler
         if (query.OnlyOpen)
             q = q.Where(t => t.StatusId != TicketsSeedData.StatusClosedId);
 
-        var items = await q
+        var raw = await q
             .OrderByDescending(t => t.CreatedAtUtc)
-            .Select(t => new TicketListItemDto(
+            .Select(t => new
+            {
                 t.Id,
                 t.TicketNumber,
                 t.Title,
-                t.TicketType!.Name,
-                t.Priority!.Name,
-                t.Status!.Name,
+                TicketTypeName = t.TicketType!.Name,
+                PriorityName = t.Priority!.Name,
+                StatusName = t.Status!.Name,
+                t.StatusId,
                 t.CreatedAtUtc,
-                t.DueAtUtc))
+                t.DueAtUtc
+            })
             .ToListAsync(ct);
+
+        var utcNow = DateTime.UtcNow;
+
+        var items = raw.Select(t => new TicketListItemDto(
+            t.Id,
+            t.TicketNumber,
+            t.Title,
+            t.TicketTypeName,
+            t.PriorityName,
+            t.StatusName,
+            t.CreatedAtUtc,
+            t.DueAtUtc,
+            DueStateCalculator.Calculate(
+                t.DueAtUtc,
+                t.StatusId == TicketsSeedData.StatusClosedId,
+                utcNow).ToString()
+        )).ToList();
 
         return new TicketListResultDto(items, items.Count);
     }
