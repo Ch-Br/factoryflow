@@ -21,3 +21,6 @@ Thumbs.db
 
 # Cursor local plans
 .cursor/
+
+# Local uploads (generated at runtime)
+src/Apps/Web/FactoryFlow.Web/uploads/
