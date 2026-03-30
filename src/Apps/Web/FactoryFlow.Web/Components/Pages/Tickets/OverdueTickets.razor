@@ -85,6 +85,9 @@
                         <th>Titel</th>
                         <th>Priorität</th>
                         <th>Status</th>
+                        <th>Abteilung</th>
+                        <th>Standort</th>
+                        <th>Maschine / Arbeitsplatz</th>
                         <th>Fällig seit</th>
                         <th>Überfällig um</th>
                     </tr>
@@ -97,6 +100,9 @@
                             <td>@ticket.Title</td>
                             <td>@ticket.PriorityName</td>
                             <td>@ticket.StatusName</td>
+                            <td>@(ticket.DepartmentName ?? "—")</td>
+                            <td>@(ticket.SiteName ?? "—")</td>
+                            <td>@(ticket.MachineOrWorkstation ?? "—")</td>
                             <td class="text-nowrap">@ticket.DueAtUtc.ToString("dd.MM.yyyy HH:mm")</td>
                             <td class="text-nowrap text-danger fw-semibold">@FormatOverdueBy(ticket.OverdueBy)</td>
                         </tr>
