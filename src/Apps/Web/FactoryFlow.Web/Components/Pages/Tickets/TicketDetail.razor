@@ -1,6 +1,7 @@
 @page "/tickets/{Id:guid}"
 @using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketComment
 @using FactoryFlow.Modules.Tickets.Application.Commands.ChangeTicketStatus
+@using FactoryFlow.Modules.Tickets.Application.Commands.UpdateTicket
 @using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketCreationLookups
 @using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketDetail
 @using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketStatusLookups
@@ -9,8 +10,10 @@
 @rendermode InteractiveServer
 @inject GetTicketDetailQueryHandler Handler
 @inject GetTicketStatusLookupsQueryHandler StatusLookupsHandler
+@inject GetTicketCreationLookupsQueryHandler CreationLookupsHandler
 @inject ChangeTicketStatusCommandHandler ChangeStatusHandler
 @inject AddTicketCommentCommandHandler CommentHandler
+@inject UpdateTicketCommandHandler UpdateHandler
 @inject NavigationManager Navigation
 
 <PageTitle>Ticketdetails – FactoryFlow</PageTitle>
@@ -236,6 +239,77 @@
                         }
                     </div>
                 </div>
+
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-3 text-muted">Ticket bearbeiten</h6>
+
+                        @if (_editSuccess is not null)
+                        {
+                            <div class="alert alert-success py-2 mb-3">@_editSuccess</div>
+                        }
+
+                        @if (_editErrors.Count > 0)
+                        {
+                            <div class="alert alert-danger py-2 mb-3">
+                                <ul class="mb-0 ps-3">
+                                    @foreach (var err in _editErrors)
+                                    {
+                                        <li>@err</li>
+                                    }
+                                </ul>
+                            </div>
+                        }
+
+                        <div class="mb-3">
+                            <label class="form-label">Titel</label>
+                            <input type="text"
+                                   class="form-control"
+                                   maxlength="200"
+                                   @bind="_editTitle"
+                                   disabled="@_submittingEdit" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Beschreibung</label>
+                            <textarea class="form-control"
+                                      rows="4"
+                                      maxlength="4000"
+                                      @bind="_editDescription"
+                                      disabled="@_submittingEdit"></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Priorität</label>
+                            @if (_priorityOptions is null)
+                            {
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="spinner-border spinner-border-sm" role="status"></div>
+                                    <span class="text-muted">Prioritäten werden geladen...</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <select class="form-select" @bind="_editPriorityId" disabled="@_submittingEdit">
+                                    @foreach (var p in _priorityOptions)
+                                    {
+                                        <option value="@p.Id">@p.Name</option>
+                                    }
+                                </select>
+                            }
+                        </div>
+
+                        <button class="btn btn-primary w-100"
+                                disabled="@(_submittingEdit || string.IsNullOrWhiteSpace(_editTitle) || string.IsNullOrWhiteSpace(_editDescription))"
+                                @onclick="HandleUpdateTicket">
+                            @if (_submittingEdit)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                            }
+                            Speichern
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     }
@@ -261,6 +335,14 @@
     private List<string> _commentErrors = [];
     private string? _commentSuccess;
 
+    private string _editTitle = string.Empty;
+    private string _editDescription = string.Empty;
+    private Guid _editPriorityId;
+    private IReadOnlyList<LookupItemDto>? _priorityOptions;
+    private bool _submittingEdit;
+    private List<string> _editErrors = [];
+    private string? _editSuccess;
+
     protected override async Task OnInitializedAsync()
     {
         try
@@ -272,6 +354,12 @@
             {
                 _selectedStatusId = _detail.StatusId;
                 _statusOptions = await StatusLookupsHandler.HandleAsync();
+
+                _editTitle = _detail.Title;
+                _editDescription = _detail.Description;
+                _editPriorityId = _detail.PriorityId;
+                var lookups = await CreationLookupsHandler.HandleAsync();
+                _priorityOptions = lookups.Priorities;
             }
         }
         catch (Exception ex)
@@ -350,6 +438,50 @@
         finally
         {
             _submittingComment = false;
+        }
+    }
+
+    private async Task HandleUpdateTicket()
+    {
+        _submittingEdit = true;
+        _editErrors.Clear();
+        _editSuccess = null;
+
+        try
+        {
+            var command = new UpdateTicketCommand
+            {
+                Title = _editTitle,
+                Description = _editDescription,
+                PriorityId = _editPriorityId
+            };
+            var result = await UpdateHandler.HandleAsync(Id, command);
+
+            if (result.Succeeded)
+            {
+                _editSuccess = "Ticket wurde erfolgreich aktualisiert.";
+                _detail = await Handler.HandleAsync(Id);
+
+                if (_detail is not null)
+                {
+                    _selectedStatusId = _detail.StatusId;
+                    _editTitle = _detail.Title;
+                    _editDescription = _detail.Description;
+                    _editPriorityId = _detail.PriorityId;
+                }
+            }
+            else
+            {
+                _editErrors.AddRange(result.Errors);
+            }
+        }
+        catch (Exception ex)
+        {
+            _editErrors.Add($"Unerwarteter Fehler: {ex.Message}");
+        }
+        finally
+        {
+            _submittingEdit = false;
         }
     }
 }

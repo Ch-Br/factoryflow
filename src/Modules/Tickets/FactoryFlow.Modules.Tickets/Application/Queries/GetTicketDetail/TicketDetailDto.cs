@@ -6,6 +6,7 @@ public sealed record TicketDetailDto(
     string Title,
     string Description,
     string TicketTypeName,
+    Guid PriorityId,
     string PriorityName,
     Guid StatusId,
     string StatusName,

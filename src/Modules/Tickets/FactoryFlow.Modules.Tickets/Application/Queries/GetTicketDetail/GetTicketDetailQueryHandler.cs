@@ -9,13 +9,14 @@ namespace FactoryFlow.Modules.Tickets.Application.Queries.GetTicketDetail;
 public sealed class GetTicketDetailQueryHandler
 {
     private static readonly string[] RelevantEventTypes =
-        ["TicketCreated", "TicketStatusChanged", "TicketCommentAdded"];
+        ["TicketCreated", "TicketStatusChanged", "TicketCommentAdded", "TicketUpdated"];
 
     private static readonly Dictionary<string, string> EventLabels = new()
     {
         ["TicketCreated"] = "Ticket erstellt",
         ["TicketStatusChanged"] = "Status geändert",
-        ["TicketCommentAdded"] = "Kommentar hinzugefügt"
+        ["TicketCommentAdded"] = "Kommentar hinzugefügt",
+        ["TicketUpdated"] = "Ticket bearbeitet"
     };
 
     private readonly DbContext _db;
@@ -43,6 +44,7 @@ public sealed class GetTicketDetailQueryHandler
                 t.Title,
                 t.Description,
                 TicketTypeName = t.TicketType!.Name,
+                t.PriorityId,
                 PriorityName = t.Priority!.Name,
                 t.StatusId,
                 StatusName = t.Status!.Name,
@@ -78,6 +80,7 @@ public sealed class GetTicketDetailQueryHandler
             detail.Title,
             detail.Description,
             detail.TicketTypeName,
+            detail.PriorityId,
             detail.PriorityName,
             detail.StatusId,
             detail.StatusName,
@@ -175,8 +178,38 @@ public sealed class GetTicketDetailQueryHandler
                 }
                 return "Kommentar hinzugefügt";
 
+            case "TicketUpdated":
+                return BuildUpdateText(entry.Payload);
+
             default:
                 return entry.EventType;
+        }
+    }
+
+    private static string BuildUpdateText(string? payload)
+    {
+        if (string.IsNullOrEmpty(payload))
+            return "Ticket bearbeitet";
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            var parts = new List<string>();
+
+            if (doc.RootElement.TryGetProperty("NewTitle", out _))
+                parts.Add("Titel");
+            if (doc.RootElement.TryGetProperty("NewDescription", out _))
+                parts.Add("Beschreibung");
+            if (doc.RootElement.TryGetProperty("NewPriorityId", out _))
+                parts.Add("Priorität");
+
+            return parts.Count > 0
+                ? $"Geändert: {string.Join(", ", parts)}"
+                : "Ticket bearbeitet";
+        }
+        catch (JsonException)
+        {
+            return "Ticket bearbeitet";
         }
     }
 

@@ -55,6 +55,29 @@ public class Ticket : AuditableEntity<Guid>
     public Guid StatusId { get; private set; }
     public TicketStatus? Status { get; private set; }
 
+    /// <summary>
+    /// Updates editable fields. Returns <c>true</c> if any value changed, <c>false</c> if all values were identical.
+    /// </summary>
+    public bool Update(string title, string description, Guid priorityId)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+            throw new ArgumentException("Titel darf nicht leer sein.", nameof(title));
+
+        if (string.IsNullOrWhiteSpace(description))
+            throw new ArgumentException("Beschreibung darf nicht leer sein.", nameof(description));
+
+        var trimmedTitle = title.Trim();
+        var trimmedDescription = description.Trim();
+
+        if (trimmedTitle == Title && trimmedDescription == Description && priorityId == PriorityId)
+            return false;
+
+        Title = trimmedTitle;
+        Description = trimmedDescription;
+        PriorityId = priorityId;
+        return true;
+    }
+
     public Guid ChangeStatus(Guid newStatusId)
     {
         if (newStatusId == StatusId)

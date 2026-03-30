@@ -1,6 +1,7 @@
 using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketComment;
 using FactoryFlow.Modules.Tickets.Application.Commands.ChangeTicketStatus;
 using FactoryFlow.Modules.Tickets.Application.Commands.CreateTicket;
+using FactoryFlow.Modules.Tickets.Application.Commands.UpdateTicket;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketCreationLookups;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketDetail;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketsList;
@@ -36,6 +37,13 @@ public static class TicketsEndpoints
         group.MapGet("/creation-lookups", GetCreationLookupsAsync)
             .WithName("GetTicketCreationLookups")
             .Produces<TicketCreationLookupsDto>();
+
+        group.MapPut("/{id:guid}", UpdateTicketAsync)
+            .WithName("UpdateTicket")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesValidationProblem()
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status401Unauthorized);
 
         group.MapPatch("/{id:guid}/status", ChangeTicketStatusAsync)
             .WithName("ChangeTicketStatus")
@@ -89,6 +97,26 @@ public static class TicketsEndpoints
     {
         var result = await handler.HandleAsync(id, ct);
         return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+
+    private static async Task<IResult> UpdateTicketAsync(
+        Guid id,
+        UpdateTicketCommand command,
+        UpdateTicketCommandHandler handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(id, command, ct);
+
+        if (!result.Succeeded)
+        {
+            if (result.Errors.Any(e => e.Contains("nicht gefunden")))
+                return Results.NotFound();
+
+            return Results.ValidationProblem(
+                new Dictionary<string, string[]> { [""] = result.Errors.ToArray() });
+        }
+
+        return Results.NoContent();
     }
 
     private static async Task<IResult> ChangeTicketStatusAsync(

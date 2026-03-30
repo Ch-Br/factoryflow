@@ -157,6 +157,60 @@ public class TicketTests
         ticket.StatusId.Should().Be(TicketsSeedData.StatusClosedId);
     }
 
+    [Fact]
+    public void Update_WithChangedValues_ReturnsTrue_AndSetsProperties()
+    {
+        var ticket = CreateValidTicket();
+        var newPriorityId = Guid.NewGuid();
+
+        var changed = ticket.Update("Neuer Titel", "Neue Beschreibung", newPriorityId);
+
+        changed.Should().BeTrue();
+        ticket.Title.Should().Be("Neuer Titel");
+        ticket.Description.Should().Be("Neue Beschreibung");
+        ticket.PriorityId.Should().Be(newPriorityId);
+    }
+
+    [Fact]
+    public void Update_WithIdenticalValues_ReturnsFalse()
+    {
+        var ticket = CreateValidTicket();
+
+        var changed = ticket.Update(ticket.Title, ticket.Description, ticket.PriorityId);
+
+        changed.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Update_WithWhitespaceOnlyDifference_ReturnsFalse()
+    {
+        var ticket = CreateValidTicket();
+
+        var changed = ticket.Update("  " + ticket.Title + "  ", "  " + ticket.Description + "  ", ticket.PriorityId);
+
+        changed.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Update_WithEmptyTitle_ThrowsArgumentException()
+    {
+        var ticket = CreateValidTicket();
+
+        var act = () => ticket.Update("  ", "Neue Beschreibung", Guid.NewGuid());
+
+        act.Should().Throw<ArgumentException>().WithParameterName("title");
+    }
+
+    [Fact]
+    public void Update_WithEmptyDescription_ThrowsArgumentException()
+    {
+        var ticket = CreateValidTicket();
+
+        var act = () => ticket.Update("Neuer Titel", "", Guid.NewGuid());
+
+        act.Should().Throw<ArgumentException>().WithParameterName("description");
+    }
+
     private static Ticket CreateValidTicket(Guid? statusNewId = null)
     {
         return Ticket.Create(

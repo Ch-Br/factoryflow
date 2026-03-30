@@ -6,6 +6,7 @@ using FactoryFlow.Modules.Identity.Services;
 using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketComment;
 using FactoryFlow.Modules.Tickets.Application.Commands.ChangeTicketStatus;
 using FactoryFlow.Modules.Tickets.Application.Commands.CreateTicket;
+using FactoryFlow.Modules.Tickets.Application.Commands.UpdateTicket;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketCreationLookups;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketDetail;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketStatusLookups;
@@ -64,6 +65,7 @@ try
     builder.Services.AddScoped<CreateTicketCommandHandler>();
     builder.Services.AddScoped<ChangeTicketStatusCommandHandler>();
     builder.Services.AddScoped<AddTicketCommentCommandHandler>();
+    builder.Services.AddScoped<UpdateTicketCommandHandler>();
     builder.Services.AddScoped<GetTicketCreationLookupsQueryHandler>();
     builder.Services.AddScoped<GetTicketsListQueryHandler>();
     builder.Services.AddScoped<GetTicketStatusLookupsQueryHandler>();

@@ -4,6 +4,7 @@ using FactoryFlow.Modules.Identity.Domain.Entities;
 using FactoryFlow.Modules.Tickets.Application.Commands.AddTicketComment;
 using FactoryFlow.Modules.Tickets.Application.Commands.ChangeTicketStatus;
 using FactoryFlow.Modules.Tickets.Application.Commands.CreateTicket;
+using FactoryFlow.Modules.Tickets.Application.Commands.UpdateTicket;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketCreationLookups;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketDetail;
 using FactoryFlow.Modules.Tickets.Application.Queries.GetTicketsList;
@@ -438,6 +439,122 @@ public class TicketsApiTests : IClassFixture<FactoryFlowWebApplicationFactory>
         commentEvent.Text.Should().Contain("Verlauf-Kommentar");
 
         detail.History.Should().BeInDescendingOrder(h => h.OccurredAtUtc);
+    }
+
+    [Fact]
+    public async Task UpdateTicket_WithValidData_Returns204()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+
+        var createResponse = await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
+        {
+            Title = "Update-Test",
+            Description = "Ticket für Update-Test.",
+            TicketTypeId = TicketsSeedData.TypeGeneralRequestId,
+            PriorityId = TicketsSeedData.PriorityMediumId,
+            DepartmentId = FactoryFlow.Modules.Identity.Infrastructure.Seeds.IdentitySeedData.ProductionDeptId
+        });
+
+        var createResult = await createResponse.Content.ReadFromJsonAsync<CreateTicketResponse>();
+
+        var putResponse = await client.PutAsJsonAsync(
+            $"/api/tickets/{createResult!.TicketId}",
+            new UpdateTicketCommand
+            {
+                Title = "Aktualisierter Titel",
+                Description = "Aktualisierte Beschreibung.",
+                PriorityId = TicketsSeedData.PriorityHighId
+            });
+
+        putResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task UpdateTicket_NonExistentTicket_Returns404()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+
+        var putResponse = await client.PutAsJsonAsync(
+            $"/api/tickets/{Guid.NewGuid()}",
+            new UpdateTicketCommand
+            {
+                Title = "Test",
+                Description = "Test",
+                PriorityId = TicketsSeedData.PriorityMediumId
+            });
+
+        putResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task UpdateTicket_CreatesAuditEntry()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+
+        var createResponse = await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
+        {
+            Title = "Update-Audit-Test",
+            Description = "Prüfe ob Audit bei Update geschrieben wird.",
+            TicketTypeId = TicketsSeedData.TypeGeneralRequestId,
+            PriorityId = TicketsSeedData.PriorityLowId,
+            DepartmentId = FactoryFlow.Modules.Identity.Infrastructure.Seeds.IdentitySeedData.ProductionDeptId
+        });
+
+        var createResult = await createResponse.Content.ReadFromJsonAsync<CreateTicketResponse>();
+
+        await client.PutAsJsonAsync(
+            $"/api/tickets/{createResult!.TicketId}",
+            new UpdateTicketCommand
+            {
+                Title = "Geänderter Titel",
+                Description = "Prüfe ob Audit bei Update geschrieben wird.",
+                PriorityId = TicketsSeedData.PriorityHighId
+            });
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FactoryFlowDbContext>();
+        var audit = await db.AuditEntries
+            .Where(a => a.EntityId == createResult.TicketId.ToString()
+                        && a.EventType == "TicketUpdated")
+            .FirstOrDefaultAsync();
+
+        audit.Should().NotBeNull();
+        audit!.Payload.Should().Contain("Geänderter Titel");
+    }
+
+    [Fact]
+    public async Task UpdateTicket_NoChanges_DoesNotCreateAuditEntry()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+
+        var createResponse = await client.PostAsJsonAsync("/api/tickets", new CreateTicketCommand
+        {
+            Title = "Unverändert-Test",
+            Description = "Keine Änderung.",
+            TicketTypeId = TicketsSeedData.TypeGeneralRequestId,
+            PriorityId = TicketsSeedData.PriorityMediumId,
+            DepartmentId = FactoryFlow.Modules.Identity.Infrastructure.Seeds.IdentitySeedData.ProductionDeptId
+        });
+
+        var createResult = await createResponse.Content.ReadFromJsonAsync<CreateTicketResponse>();
+
+        await client.PutAsJsonAsync(
+            $"/api/tickets/{createResult!.TicketId}",
+            new UpdateTicketCommand
+            {
+                Title = "Unverändert-Test",
+                Description = "Keine Änderung.",
+                PriorityId = TicketsSeedData.PriorityMediumId
+            });
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FactoryFlowDbContext>();
+        var audit = await db.AuditEntries
+            .Where(a => a.EntityId == createResult.TicketId.ToString()
+                        && a.EventType == "TicketUpdated")
+            .FirstOrDefaultAsync();
+
+        audit.Should().BeNull();
     }
 
     private async Task<HttpClient> CreateAuthenticatedClientAsync()
